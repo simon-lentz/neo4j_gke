@@ -1,0 +1,74 @@
+name: Infra - Lint
+on:
+  push:
+    paths:
+      - 'infra/'
+      - '.github/workflows/infra-lint.yaml'
+  pull_request:
+    paths:
+      - 'infra/'
+      - '.github/workflows/infra-lint.yaml'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  go-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: test
+          args: --timeout=5m
+  hcl-lint:
+    runs-on: ubuntu-latest
+    env:
+      TOFU_VERSION: 1.9.1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup OpenTofu and plugin cache
+        uses: ./.github/actions/tofu-setup
+        with:
+          tofu-version: ${{ env.TOFU_VERSION }}
+          cache-subdir: tofu-plugin-cache
+          cache-key-prefix: tofu
+      - name: Enforce OpenTofu formatting (tofu fmt)
+        run: tofu fmt -recursive -check infra/
+      - name: Validate all Terraform modules (tofu validate)
+        run: |
+          set -euo pipefail
+          for dir in infra/modules/*; do
+            [[ -d "$dir" ]] || continue
+            echo "::group::validate: $dir"
+            (cd "$dir" && tofu init -backend=false >/dev/null 2>&1 || true)
+            (cd "$dir" && tofu validate)
+            echo "::endgroup::"
+          done
+  tflint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v6
+      - name: Run TFLint
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          tflint --init
+          tflint -f compact

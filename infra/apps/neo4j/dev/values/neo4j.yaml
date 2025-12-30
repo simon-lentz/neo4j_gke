@@ -1,0 +1,66 @@
+# Neo4j Helm Chart Values - Dev Environment
+# See https://neo4j.com/docs/operations-manual/current/kubernetes/helm-charts-setup/
+
+neo4j:
+  # Use Enterprise Edition for backup support
+  edition: enterprise
+  acceptLicenseAgreement: "yes"
+  # Password is set via Terraform set_sensitive block
+
+# Service Configuration
+services:
+  # Disable external LoadBalancer (use internal only)
+  neo4j:
+    enabled: false
+  # Enable ClusterIP for in-cluster access
+  default:
+    enabled: true
+    type: ClusterIP
+  # Enable admin service for backups
+  admin:
+    enabled: true
+    type: ClusterIP
+
+# Neo4j Configuration
+config:
+  # Use Cypher 25 as default query language
+  db.query.default_language: "CYPHER_25"
+  # Disable HTTP/HTTPS (Bolt only)
+  server.http.enabled: "false"
+  server.https.enabled: "false"
+  # Bolt TLS optional for dev (required for prod)
+  server.bolt.tls_level: "OPTIONAL"
+  # Enable backup listener
+  server.backup.listen_address: "0.0.0.0:6362"
+  server.backup.enabled: "true"
+
+# Volume Configuration
+volumes:
+  data:
+    mode: "defaultStorageClass"
+    defaultStorageClass:
+      requests:
+        storage: 10Gi
+
+# Resource Configuration for Autopilot
+# Autopilot will auto-scale resources, but we set reasonable defaults
+resources:
+  requests:
+    cpu: "500m"
+    memory: "2Gi"
+
+# Pod Configuration
+podSpec:
+  # Allow scheduling on any node (Autopilot handles this)
+  nodeSelector: {}
+  tolerations: []
+
+# Logging
+logs:
+  # Send logs to stdout for collection
+  redirectQueryLog: true
+
+# Metrics (optional - enable if using Prometheus)
+metrics:
+  prometheus:
+    enabled: false

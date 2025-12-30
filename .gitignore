@@ -1,0 +1,30 @@
+# LLMs
+.claude
+
+# Ignore generated credentials from google-github-actions/auth
+gha-creds-*.json
+
+# Local development files
+DEV_*.md
+_private/
+
+# Terraform
+**/.terraform/
+*.tfstate*
+*.tfvars
+*.tfbackend
+infra/envs/**/backend.hcl
+# Keep the provider lock file, see Hashicorp recommendation: (https://developer.hashicorp.com/terraform/language/files/dependency-lock)
+!.terraform.lock.hcl
+
+# Test binary, built with `go test -c`
+*.test
+
+# Environments
+.env
+env/
+ENV/
+env.bak/
+
+.DS_Store
+.vscode/

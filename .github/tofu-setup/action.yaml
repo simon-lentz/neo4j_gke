@@ -1,0 +1,83 @@
+name: Setup OpenTofu + plugin cache
+description: Ensure OpenTofu is available and configure a plugin cache under $RUNNER_TEMP. If tofu is not found, install it (or install a specific version if requested).
+inputs:
+  tofu-version:
+    description: OpenTofu version to install (leave empty to use existing tofu or install latest if missing)
+    required: false
+    default: ''
+  cache-subdir:
+    description: Subdirectory under $RUNNER_TEMP used for the plugin cache
+    required: false
+    default: tofu-plugin-cache
+  cache-key-prefix:
+    description: Prefix for cache keys
+    required: false
+    default: tofu
+  set-env-name:
+    description: Environment variable name to export with the plugin cache path
+    required: false
+    default: TF_PLUGIN_CACHE_DIR
+outputs:
+  plugin_dir:
+    description: Absolute path to the plugin cache directory
+    value: ${{ steps.compute.outputs.plugin_dir }}
+runs:
+  using: composite
+  steps:
+    - id: detect
+      name: Detect OpenTofu on PATH
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v tofu >/dev/null 2>&1; then
+          ver="$(tofu version 2>/dev/null | head -n1 | sed -E 's/^OpenTofu v?//')"
+          echo "found=true"   >> "$GITHUB_OUTPUT"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false"  >> "$GITHUB_OUTPUT"
+          echo "version="     >> "$GITHUB_OUTPUT"
+        fi
+    # Install if missing, or if the caller explicitly requests a version.
+    - name: Install OpenTofu (if missing or version specified)
+      if: ${{ steps.detect.outputs.found != 'true' || inputs.tofu-version != '' }}
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: ${{ inputs.tofu-version != '' && inputs.tofu-version || 'latest' }}
+    - name: Verify OpenTofu availability
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "tofu path: $(command -v tofu)"
+        tofu version
+    - id: compute
+      name: Compute plugin cache path
+      shell: bash
+      run: |
+        set -euo pipefail
+        PLUGDIR="${RUNNER_TEMP}/${{ inputs.cache-subdir }}"
+        # Export it for subsequent steps in the job
+        echo "${{ inputs.set-env-name }}=$PLUGDIR" >> "$GITHUB_ENV"
+        echo "plugin_dir=$PLUGDIR" >> "$GITHUB_OUTPUT"
+    - name: Ensure plugin cache directory exists
+      shell: bash
+      run: mkdir -p "${{ steps.compute.outputs.plugin_dir }}"
+    - name: Cache OpenTofu plugin directory
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.compute.outputs.plugin_dir }}
+        key: ${{ inputs.cache-key-prefix }}-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-${{ runner.os }}-
+    - name: Summary (tofu + plugin cache)
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        {
+          echo "### OpenTofu setup"
+          echo
+          echo "- tofu: \`$(command -v tofu)\`"
+          tofu version
+          echo
+          echo "- plugin cache: \`${{ steps.compute.outputs.plugin_dir }}\`"
+          echo "- exported env: \`${{ inputs.set-env-name }}\`"
+        } >> "$GITHUB_STEP_SUMMARY"

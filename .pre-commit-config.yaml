@@ -1,0 +1,50 @@
+ci:
+  autoupdate_schedule: monthly
+  skip: []
+repos:
+  # --- generic hooks ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-json
+  # --- GHA hooks ---
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.8
+    hooks:
+      - id: actionlint
+        name: actionlint (GHA)
+        files: ^\.github/workflows/.*\.ya?ml$
+  # --- infrastructure hooks (Terraform / OpenTofu / Go) ---
+  - repo: https://github.com/tofuutils/pre-commit-opentofu
+    rev: v2.2.2
+    hooks:
+      - id: tofu_fmt
+        name: tofu fmt infrastructure IaC
+        files: ^infra/.*\.(tf|tfvars|tftest\.hcl)$
+      - id: tofu_validate
+        name: tofu validate infrastructure IaC
+        files: ^infra/.*\.tf$
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v1.0.0-rc.2
+    hooks:
+      - id: go-mod-tidy-repo
+        name: go mod tidy infrastructure Go
+        files: ^test/
+      - id: go-fmt-repo
+        name: go fmt infrastructure Go
+        files: ^test/.*\.go$
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.5.0
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint infrastructure Go
+        files: ^test/.*\.go$
+  - repo: local
+    hooks:
+      - id: hclfmt-generic
+        name: hclfmt infrastructure IaC
+        language: system
+        pass_filenames: true
+        files: ^infra/.*\.hcl$
+        exclude: ^infra/.*\.tftest\.hcl$
+        entry: bash -lc 'if [ "$#" -eq 0 ]; then exit 0; fi; hclfmt -w "$@"'
