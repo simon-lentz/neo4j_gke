@@ -89,14 +89,14 @@ variable "release_channel" {
 
 variable "maintenance_start_time" {
   type        = string
-  description = "Start time for the maintenance window in RFC3339 format. The date component is ignored by GKE for recurring windows; only the time matters."
-  default     = "2099-01-01T09:00:00Z"
+  description = "Start time for the maintenance window in RFC3339 format. The date is the initial start date for the recurring window; use a past date to activate immediately."
+  default     = "2024-01-01T09:00:00Z"
 }
 
 variable "maintenance_end_time" {
   type        = string
-  description = "End time for the maintenance window in RFC3339 format. The date component is ignored by GKE for recurring windows; only the time matters."
-  default     = "2099-01-01T17:00:00Z"
+  description = "End time for the maintenance window in RFC3339 format. Should use the same date as maintenance_start_time."
+  default     = "2024-01-01T17:00:00Z"
 }
 
 variable "maintenance_recurrence" {
