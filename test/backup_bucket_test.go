@@ -11,10 +11,13 @@ import (
 )
 
 func TestBackupBucket_CreateDescribeDestroy(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, DefaultTestTimeout)
+
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
 
 	// First create a service account for the bucket IAM bindings
-	saDir := copyModuleToTemp(t, "service_accounts")
+	saDir := CopyModuleToTemp(t, "service_accounts")
 	suffix := strings.ToLower(random.UniqueId())
 
 	saTf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
@@ -32,14 +35,11 @@ func TestBackupBucket_CreateDescribeDestroy(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, saTf)
-	terraform.InitAndApply(t, saTf)
-
-	// Get SA email from output
+	// Get SA email (known before creation)
 	saEmail := fmt.Sprintf("backup-%s@%s.iam.gserviceaccount.com", suffix, projectID)
 
-	// Create backup bucket
-	bucketDir := copyModuleToTemp(t, "backup_bucket")
+	// Create backup bucket config
+	bucketDir := CopyModuleToTemp(t, "backup_bucket")
 	bucketName := fmt.Sprintf("%s-backup-test-%s", projectID, suffix)
 
 	tf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
@@ -48,7 +48,7 @@ func TestBackupBucket_CreateDescribeDestroy(t *testing.T) {
 		Vars: map[string]any{
 			"project_id":              projectID,
 			"bucket_name":             bucketName,
-			"location":                "us-central1",
+			"location":                GetTestRegion(t),
 			"backup_sa_email":         saEmail,
 			"backup_retention_days":   30,
 			"backup_versions_to_keep": 5,
@@ -60,7 +60,12 @@ func TestBackupBucket_CreateDescribeDestroy(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup for both resources BEFORE creating anything
+	// Order: bucket cleanup first, then SA (LIFO)
+	DeferredTerraformCleanup(t, saTf)
+	DeferredTerraformCleanup(t, tf)
+
+	terraform.InitAndApply(t, saTf)
 	terraform.InitAndApply(t, tf)
 
 	// Verify bucket was created
@@ -97,10 +102,13 @@ func TestBackupBucket_CreateDescribeDestroy(t *testing.T) {
 }
 
 func TestBackupBucket_WithoutVersioning(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, DefaultTestTimeout)
+
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
 
 	// Create a minimal service account
-	saDir := copyModuleToTemp(t, "service_accounts")
+	saDir := CopyModuleToTemp(t, "service_accounts")
 	suffix := strings.ToLower(random.UniqueId())
 
 	saTf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
@@ -118,13 +126,10 @@ func TestBackupBucket_WithoutVersioning(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, saTf)
-	terraform.InitAndApply(t, saTf)
-
 	saEmail := fmt.Sprintf("bkp-%s@%s.iam.gserviceaccount.com", suffix, projectID)
 
 	// Create bucket without versioning
-	bucketDir := copyModuleToTemp(t, "backup_bucket")
+	bucketDir := CopyModuleToTemp(t, "backup_bucket")
 	bucketName := fmt.Sprintf("%s-novers-%s", projectID, suffix)
 
 	tf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
@@ -133,7 +138,7 @@ func TestBackupBucket_WithoutVersioning(t *testing.T) {
 		Vars: map[string]any{
 			"project_id":        projectID,
 			"bucket_name":       bucketName,
-			"location":          "us-central1",
+			"location":          GetTestRegion(t),
 			"backup_sa_email":   saEmail,
 			"enable_versioning": false,
 			"force_destroy":     true,
@@ -141,7 +146,11 @@ func TestBackupBucket_WithoutVersioning(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup for both resources BEFORE creating anything
+	DeferredTerraformCleanup(t, saTf)
+	DeferredTerraformCleanup(t, tf)
+
+	terraform.InitAndApply(t, saTf)
 	terraform.InitAndApply(t, tf)
 
 	// Verify versioning is disabled

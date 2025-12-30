@@ -16,3 +16,21 @@ variable "region" {
     error_message = "region must be a valid GCP region (e.g., us-central1)."
   }
 }
+
+variable "subnet_ip_range" {
+  type        = string
+  description = "Primary IP CIDR range for the subnet."
+  default     = "10.0.0.0/24"
+}
+
+variable "pods_ip_range" {
+  type        = string
+  description = "Secondary IP CIDR range for GKE pods."
+  default     = "10.1.0.0/16"
+}
+
+variable "services_ip_range" {
+  type        = string
+  description = "Secondary IP CIDR range for GKE services."
+  default     = "10.2.0.0/20"
+}

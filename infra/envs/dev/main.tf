@@ -15,17 +15,12 @@ module "vpc" {
   vpc_name   = "neo4j-dev-vpc"
 
   # IP ranges for GKE
-  subnet_ip_range   = "10.0.0.0/24"
-  pods_ip_range     = "10.1.0.0/16"
-  services_ip_range = "10.2.0.0/20"
+  subnet_ip_range   = var.subnet_ip_range
+  pods_ip_range     = var.pods_ip_range
+  services_ip_range = var.services_ip_range
 
   # Enable Cloud NAT for private node egress
   enable_cloud_nat = true
-
-  labels = {
-    environment = "dev"
-    managed_by  = "tofu"
-  }
 }
 
 # GKE Autopilot Cluster

@@ -6,6 +6,7 @@ Creates a GCS bucket for Neo4j backups with security best practices:
 - Object versioning for recovery
 - Lifecycle rules for retention management
 - Least-privilege IAM for backup service account
+- Optional CMEK encryption for regulatory compliance
 
 ## Usage
 
@@ -36,6 +37,26 @@ module "backup_bucket" {
 | PAP | Enforced | Prevent accidental public exposure |
 | Versioning | Enabled | Recover deleted/overwritten files |
 | IAM | objectCreator + objectViewer | Least-privilege for backup SA |
+| CMEK | Optional | Customer-managed encryption keys |
+
+## CMEK Encryption
+
+By default, the bucket uses Google-managed encryption (GMEK). For regulatory compliance or enhanced key control, you can provide a Cloud KMS key:
+
+```hcl
+module "backup_bucket" {
+  source          = "../../modules/backup_bucket"
+  project_id      = "my-project"
+  bucket_name     = "my-project-neo4j-backups"
+  location        = "us-central1"
+  backup_sa_email = module.backup_sa.service_accounts["neo4j-backup"].email
+
+  # Optional: Use customer-managed encryption key
+  kms_key_name = "projects/my-project/locations/us-central1/keyRings/my-ring/cryptoKeys/my-key"
+}
+```
+
+**Note:** The KMS key must exist in the same location as the bucket. The GCS service account must have `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the key.
 
 ## Backup Service Account Permissions
 
@@ -72,6 +93,7 @@ This follows least-privilege: the SA cannot delete objects, list other buckets, 
 | force_destroy | Allow destruction with objects | `bool` | `false` | no |
 | enable_versioning | Enable object versioning | `bool` | `true` | no |
 | labels | Labels for the bucket | `map(string)` | `{}` | no |
+| kms_key_name | KMS key for CMEK encryption (null = GMEK) | `string` | `null` | no |
 
 ## Outputs
 
@@ -81,3 +103,4 @@ This follows least-privilege: the SA cannot delete objects, list other buckets, 
 | bucket_url | gs:// URL of the bucket |
 | bucket_self_link | Self link of the bucket |
 | bucket_location | Location of the bucket |
+| kms_key_name | KMS key used for encryption (if any) |

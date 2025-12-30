@@ -78,6 +78,7 @@ tofu apply \
 | `neo4j_namespace` | Kubernetes namespace | `neo4j` |
 | `neo4j_instance_name` | Neo4j instance name | `neo4j-dev` |
 | `neo4j_storage_size` | Data volume size | `10Gi` |
+| `enable_neo4j_browser` | Enable HTTP for Neo4j Browser | `true` |
 
 ## Outputs
 
@@ -102,6 +103,30 @@ kubectl port-forward -n neo4j svc/neo4j-dev-lb-neo4j 7687:7687
 # Connect with cypher-shell
 cypher-shell -a bolt://localhost:7687 -u neo4j -p <password>
 ```
+
+### Neo4j Browser (Web UI)
+
+Access the Neo4j Browser for visual graph exploration and query development:
+
+```bash
+# Port-forward HTTP for browser access
+kubectl port-forward -n neo4j svc/neo4j-dev-lb-neo4j 7474:7474
+
+# Open in browser
+open http://localhost:7474/browser
+```
+
+**Credentials:**
+
+- **Username:** `neo4j`
+- **Password:** Retrieved from Secret Manager (`neo4j-admin-password-dev`)
+
+The Neo4j Browser provides:
+
+- Visual graph exploration
+- Cypher query editor with syntax highlighting
+- Database schema visualization
+- Query performance profiling
 
 ## Backups
 

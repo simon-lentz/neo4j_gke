@@ -44,6 +44,14 @@ Example: { "my-secret" = ["serviceAccount:foo@proj.iam.gserviceaccount.com"] }
 EOT
   type        = map(list(string))
   default     = {}
+  validation {
+    condition = alltrue(flatten([
+      for members in values(var.accessors) : [
+        for m in members : can(regex("^(user|serviceAccount|group|domain|allUsers|allAuthenticatedUsers):", m))
+      ]
+    ]))
+    error_message = "Each accessor must be a valid IAM member format (e.g., serviceAccount:email, user:email)."
+  }
 }
 
 variable "replication_locations" {

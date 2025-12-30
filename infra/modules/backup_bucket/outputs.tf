@@ -17,3 +17,8 @@ output "bucket_location" {
   description = "The location of the backup bucket."
   value       = google_storage_bucket.backups.location
 }
+
+output "kms_key_name" {
+  description = "The KMS key used for bucket encryption, if any."
+  value       = var.kms_key_name
+}

@@ -11,9 +11,12 @@ import (
 )
 
 func TestSecrets_CreateDescribeDestroy(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, DefaultTestTimeout)
 
-	tfDir := copyModuleToTemp(t, "secrets")
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+
+	tfDir := CopyModuleToTemp(t, "secrets")
 	suffix := strings.ToLower(random.UniqueId())
 	secretName := fmt.Sprintf("test-secret-%s", suffix)
 
@@ -35,7 +38,8 @@ func TestSecrets_CreateDescribeDestroy(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup BEFORE creating resources
+	DeferredTerraformCleanup(t, tf)
 	terraform.InitAndApply(t, tf)
 
 	// Verify secret was created
@@ -53,10 +57,13 @@ func TestSecrets_CreateDescribeDestroy(t *testing.T) {
 }
 
 func TestSecrets_WithAccessors(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, DefaultTestTimeout)
+
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
 
 	// First create a service account to grant access to
-	saDir := copyModuleToTemp(t, "service_accounts")
+	saDir := CopyModuleToTemp(t, "service_accounts")
 	saSuffix := strings.ToLower(random.UniqueId())
 	saName := fmt.Sprintf("test-sa-%s", saSuffix)
 
@@ -75,16 +82,8 @@ func TestSecrets_WithAccessors(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, saTf)
-	terraform.InitAndApply(t, saTf)
-
-	// Get SA email
-	saOutput := terraform.OutputJson(t, saTf, "service_accounts")
-	// Parse just to get the email
-	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", saName, projectID)
-
 	// Now create secret with accessor
-	secretDir := copyModuleToTemp(t, "secrets")
+	secretDir := CopyModuleToTemp(t, "secrets")
 	suffix := strings.ToLower(random.UniqueId())
 	secretName := fmt.Sprintf("test-secret-acl-%s", suffix)
 
@@ -99,14 +98,29 @@ func TestSecrets_WithAccessors(t *testing.T) {
 				},
 			},
 			"accessors": map[string][]string{
-				secretName: {fmt.Sprintf("serviceAccount:%s", saEmail)},
+				// Will be set after SA is created
+				secretName: {},
 			},
 			"enable_secret_manager_api": false, // Already enabled
 		},
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup for both resources BEFORE creating anything
+	// Order: secret cleanup first, then SA (LIFO)
+	DeferredTerraformCleanup(t, saTf)
+	DeferredTerraformCleanup(t, tf)
+
+	terraform.InitAndApply(t, saTf)
+
+	// Compute SA email from known format
+	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", saName, projectID)
+
+	// Update secret terraform with the SA email
+	tf.Vars["accessors"] = map[string][]string{
+		secretName: {fmt.Sprintf("serviceAccount:%s", saEmail)},
+	}
+
 	terraform.InitAndApply(t, tf)
 
 	// Verify secret was created
@@ -117,15 +131,15 @@ func TestSecrets_WithAccessors(t *testing.T) {
 	out := runGCLOUD(t, projectID, "secrets", "get-iam-policy", secretName, "--format=json")
 	require.Contains(t, out, saEmail)
 	require.Contains(t, out, "roles/secretmanager.secretAccessor")
-
-	// Keep reference to saOutput to avoid unused variable error
-	_ = saOutput
 }
 
 func TestSecrets_MultipleSecrets(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, DefaultTestTimeout)
 
-	tfDir := copyModuleToTemp(t, "secrets")
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+
+	tfDir := CopyModuleToTemp(t, "secrets")
 	suffix := strings.ToLower(random.UniqueId())
 
 	tf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
@@ -149,7 +163,8 @@ func TestSecrets_MultipleSecrets(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup BEFORE creating resources
+	DeferredTerraformCleanup(t, tf)
 	terraform.InitAndApply(t, tf)
 
 	// Verify both secrets were created

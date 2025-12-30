@@ -1,7 +1,3 @@
-provider "google" {
-  project = var.project_id
-}
-
 # Use the two-variant pattern so prevent_destroy can be toggled per environment.
 resource "google_service_account" "service_account_protected" {
   for_each     = var.prevent_destroy_service_accounts ? local.service_accounts : {}

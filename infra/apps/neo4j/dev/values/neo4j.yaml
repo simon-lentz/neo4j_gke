@@ -25,8 +25,8 @@ services:
 config:
   # Use Cypher 25 as default query language
   db.query.default_language: "CYPHER_25"
-  # Disable HTTP/HTTPS (Bolt only)
-  server.http.enabled: "false"
+  # Enable HTTP for Neo4j Browser (internal ClusterIP access only)
+  server.http.enabled: "true"
   server.https.enabled: "false"
   # Bolt TLS optional for dev (required for prod)
   server.bolt.tls_level: "OPTIONAL"

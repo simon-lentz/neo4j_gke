@@ -12,9 +12,12 @@ import (
 )
 
 func TestWIF_CreateDescribeDestroy(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, DefaultTestTimeout)
 
-	tfDir := copyModuleToTemp(t, "wif")
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+
+	tfDir := CopyModuleToTemp(t, "wif")
 	suffix := strings.ToLower(random.UniqueId())
 	poolID := fmt.Sprintf("gha-terratest-%s", suffix)
 
@@ -34,7 +37,8 @@ func TestWIF_CreateDescribeDestroy(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup BEFORE creating resources
+	DeferredTerraformCleanup(t, tf)
 	terraform.InitAndApply(t, tf)
 
 	providerName := terraform.Output(t, tf, "provider_name")
@@ -53,8 +57,8 @@ func TestWIF_CreateDescribeDestroy(t *testing.T) {
 }
 
 func TestWIF_PreconditionFailsWithoutSelectors(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
-	tfDir := copyModuleToTemp(t, "wif")
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	tfDir := CopyModuleToTemp(t, "wif")
 	suffix := strings.ToLower(random.UniqueId())
 	poolID := fmt.Sprintf("gha-precond-%s", suffix)
 

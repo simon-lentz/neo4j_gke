@@ -31,6 +31,7 @@ This repository provisions a **single-instance Neo4j Enterprise** deployment on 
 │       ├── gke/
 │       ├── secrets/
 │       ├── backup_bucket/
+│       ├── audit_logging/
 │       ├── service_accounts/
 │       ├── wif/
 │       └── bootstrap/
@@ -56,6 +57,34 @@ The apps layer reads platform outputs via `terraform_remote_state`, keeping owne
 - [OpenTofu](https://opentofu.org/) >= 1.9.1
 - [gcloud CLI](https://cloud.google.com/sdk/gcloud) authenticated
 - GCP project with billing enabled
+
+## Development Setup
+
+### Pre-commit Hooks
+
+Install pre-commit hooks and formatting dependencies:
+
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Install hclfmt (required for HCL formatting)
+go install github.com/hashicorp/hcl/v2/cmd/hclfmt@latest
+
+# Install hooks
+pre-commit install
+```
+
+### Running Tests
+
+```bash
+cd test
+go test -v -short ./...  # Quick validation (skips long-running tests)
+go test -v -timeout 30m ./...  # Integration tests (VPC, GKE, etc.)
+
+# End-to-end tests (deploys full Neo4j stack, ~45 min)
+go test -tags=e2e -timeout 45m -v ./test/e2e/...
+```
 
 ### 1. Bootstrap (one-time)
 
@@ -95,11 +124,17 @@ tofu apply \
 ### 5. Connect
 
 ```bash
-# Port-forward for local access
+# Port-forward for Bolt protocol (programmatic access)
 kubectl port-forward -n neo4j svc/neo4j-dev-lb-neo4j 7687:7687
 
-# Connect
+# Port-forward for Neo4j Browser (web UI)
+kubectl port-forward -n neo4j svc/neo4j-dev-lb-neo4j 7474:7474
+
+# Connect via cypher-shell
 cypher-shell -a bolt://localhost:7687 -u neo4j -p <password>
+
+# Or open Neo4j Browser
+open http://localhost:7474/browser
 ```
 
 ## Documentation
@@ -112,6 +147,7 @@ cypher-shell -a bolt://localhost:7687 -u neo4j -p <password>
 | [gke](infra/modules/gke/README.md) | GKE Autopilot cluster |
 | [secrets](infra/modules/secrets/README.md) | Secret Manager secrets |
 | [backup_bucket](infra/modules/backup_bucket/README.md) | GCS bucket for backups |
+| [audit_logging](infra/modules/audit_logging/README.md) | KMS/GCS audit logging |
 | [service_accounts](infra/modules/service_accounts/README.md) | GCP service accounts |
 | [wif](infra/modules/wif/README.md) | Workload Identity Federation |
 | [bootstrap](infra/modules/bootstrap/README.md) | State bucket bootstrap |
@@ -131,12 +167,19 @@ Run integration tests (requires GCP credentials -> `gcloud auth application-defa
 export NEO4J_GKE_GCP_PROJECT_ID="your-project-id"
 export NEO4J_GKE_STATE_BUCKET_LOCATION="us-central1"
 
-# Run tests
+# Run unit/integration tests
 go test -v ./test/...
 
-# Skip long-running GKE tests
-go test -v -short ./test/...
+# Run end-to-end tests (full Neo4j deployment, ~45 min)
+go test -tags=e2e -timeout 45m -v ./test/e2e/...
+
+# Or, save test output for review
+go test -v ./test/... --json > gotest.jsonl
 ```
+
+**Test Categories:**
+- `test/` - Module integration tests (VPC, GKE, secrets, etc.)
+- `test/e2e/` - Full end-to-end tests requiring `//go:build e2e` tag
 
 ## Security
 

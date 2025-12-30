@@ -52,3 +52,21 @@ variable "neo4j_storage_size" {
   description = "Storage size for Neo4j data volume."
   default     = "10Gi"
 }
+
+variable "enable_neo4j_browser" {
+  type        = bool
+  description = "Enable HTTP for Neo4j Browser access (port 7474)."
+  default     = true
+}
+
+variable "allowed_ingress_namespaces" {
+  type        = list(string)
+  description = "Additional namespaces allowed to access Neo4j (e.g., for monitoring, application pods)."
+  default     = []
+}
+
+variable "neo4j_helm_repository" {
+  type        = string
+  description = "Helm repository URL for Neo4j chart."
+  default     = "https://helm.neo4j.com/neo4j"
+}

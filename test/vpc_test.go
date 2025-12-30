@@ -10,11 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestVPC_CreateDescribeDestroy creates a VPC with Cloud NAT and validates configuration.
+//
+// Run with sufficient timeout:
+//
+//	go test -timeout 15m -v ./test/... -run TestVPC_CreateDescribeDestroy
 func TestVPC_CreateDescribeDestroy(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
-	region := "us-central1"
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, VPCTestTimeout)
 
-	tfDir := copyModuleToTemp(t, "vpc")
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	region := GetTestRegion(t)
+
+	tfDir := CopyModuleToTemp(t, "vpc")
 	suffix := strings.ToLower(random.UniqueId())
 	vpcName := fmt.Sprintf("test-vpc-%s", suffix)
 
@@ -30,7 +38,8 @@ func TestVPC_CreateDescribeDestroy(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup BEFORE creating resources
+	DeferredTerraformCleanup(t, tf)
 	terraform.InitAndApply(t, tf)
 
 	// Verify VPC exists
@@ -76,10 +85,13 @@ func TestVPC_CreateDescribeDestroy(t *testing.T) {
 }
 
 func TestVPC_WithoutCloudNAT(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
-	region := "us-central1"
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, VPCTestTimeout)
 
-	tfDir := copyModuleToTemp(t, "vpc")
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	region := GetTestRegion(t)
+
+	tfDir := CopyModuleToTemp(t, "vpc")
 	suffix := strings.ToLower(random.UniqueId())
 	vpcName := fmt.Sprintf("test-vpc-nonat-%s", suffix)
 
@@ -95,17 +107,25 @@ func TestVPC_WithoutCloudNAT(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup BEFORE creating resources
+	DeferredTerraformCleanup(t, tf)
 	terraform.InitAndApply(t, tf)
 
 	// Verify VPC exists
 	networkName := terraform.Output(t, tf, "network_name")
 	require.Equal(t, vpcName, networkName)
 
-	// Verify no NAT was created
-	natName := terraform.Output(t, tf, "nat_name")
-	require.Empty(t, natName)
+	// Verify no NAT was created - outputs are null when NAT disabled,
+	// which causes OutputE to error (OpenTofu treats null as "not found")
+	natName, err := terraform.OutputE(t, tf, "nat_name")
+	if err == nil {
+		require.Empty(t, natName, "nat_name should be empty when Cloud NAT is disabled")
+	}
+	// If err != nil, that's expected - output value is null
 
-	routerName := terraform.Output(t, tf, "router_name")
-	require.Empty(t, routerName)
+	routerName, err := terraform.OutputE(t, tf, "router_name")
+	if err == nil {
+		require.Empty(t, routerName, "router_name should be empty when Cloud NAT is disabled")
+	}
+	// If err != nil, that's expected - output value is null
 }

@@ -2,11 +2,13 @@ name: Infra - Lint
 on:
   push:
     paths:
-      - 'infra/'
+      - 'infra/**'
+      - 'test/**'
       - '.github/workflows/infra-lint.yaml'
   pull_request:
     paths:
-      - 'infra/'
+      - 'infra/**'
+      - 'test/**'
       - '.github/workflows/infra-lint.yaml'
   workflow_dispatch:
 concurrency:
@@ -22,16 +24,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c  # v6.1.0
         with:
           go-version-file: go.mod
           cache: true
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20  # v9.2.0
         with:
-          version: latest
+          version: v1.62.0
           working-directory: test
           args: --timeout=5m
   hcl-lint:
@@ -40,7 +42,7 @@ jobs:
       TOFU_VERSION: 1.9.1
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
       - name: Setup OpenTofu and plugin cache
         uses: ./.github/actions/tofu-setup
         with:
@@ -63,9 +65,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
       - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v6
+        uses: terraform-linters/setup-tflint@0c688f0e33c43029df9334b85caeff28837a53bd  # v6.2.1
       - name: Run TFLint
         working-directory: infra
         run: |

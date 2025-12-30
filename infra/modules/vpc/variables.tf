@@ -80,6 +80,12 @@ variable "enable_cloud_nat" {
   default     = true
 }
 
+variable "enable_flow_logs" {
+  type        = bool
+  description = "Enable VPC flow logs on the subnet. Incurs additional costs."
+  default     = true
+}
+
 variable "nat_ip_allocate_option" {
   type        = string
   description = "How NAT IPs are allocated: AUTO_ONLY or MANUAL_ONLY."
@@ -94,10 +100,4 @@ variable "nat_source_subnetwork_ip_ranges_to_nat" {
   type        = string
   description = "Which subnet IP ranges to NAT."
   default     = "ALL_SUBNETWORKS_ALL_IP_RANGES"
-}
-
-variable "labels" {
-  type        = map(string)
-  description = "Labels to apply to resources."
-  default     = {}
 }

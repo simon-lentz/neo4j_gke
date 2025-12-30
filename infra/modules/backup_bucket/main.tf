@@ -45,6 +45,14 @@ resource "google_storage_bucket" "backups" {
   }
 
   labels = var.labels
+
+  # Optional CMEK encryption
+  dynamic "encryption" {
+    for_each = var.kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.kms_key_name
+    }
+  }
 }
 
 # Grant backup service account permission to create objects

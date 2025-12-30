@@ -11,19 +11,30 @@ import (
 )
 
 // TestGKE_CreateDescribeDestroy creates a full GKE Autopilot cluster.
-// This test is SLOW (10-15 minutes) and should be skipped in short mode.
+// This test is SLOW (15-20 minutes for creation + 5-10 minutes for cleanup).
+//
+// IMPORTANT: Run with sufficient timeout to allow cleanup:
+//
+//	go test -timeout 30m -v ./test/... -run TestGKE_CreateDescribeDestroy
+//
+// The test will fail fast if the timeout is insufficient, preventing orphaned resources.
 func TestGKE_CreateDescribeDestroy(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Skipping GKE integration test in short mode (takes 10-15 minutes)")
+		t.Skip("Skipping GKE integration test in short mode (takes 15-20 minutes)")
 	}
 
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
-	region := "us-central1"
+	// CRITICAL: Validate timeout BEFORE creating any resources.
+	// GKE cluster creation takes 15-20 minutes, and cleanup takes 5-10 minutes.
+	// If we don't have enough time, fail fast rather than orphan resources.
+	RequireMinimumTimeout(t, GKETestTimeout)
+
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	region := GetTestRegion(t)
 
 	suffix := strings.ToLower(random.UniqueId())
 
 	// Step 1: Create VPC first (GKE depends on it)
-	vpcDir := copyModuleToTemp(t, "vpc")
+	vpcDir := CopyModuleToTemp(t, "vpc")
 	vpcName := fmt.Sprintf("gke-test-vpc-%s", suffix)
 
 	vpcTf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
@@ -38,19 +49,11 @@ func TestGKE_CreateDescribeDestroy(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, vpcTf)
-	terraform.InitAndApply(t, vpcTf)
-
-	// Get VPC outputs
-	networkID := terraform.Output(t, vpcTf, "network_id")
-	subnetID := terraform.Output(t, vpcTf, "subnet_id")
-	podsRangeName := terraform.Output(t, vpcTf, "pods_range_name")
-	servicesRangeName := terraform.Output(t, vpcTf, "services_range_name")
-
-	// Step 2: Create GKE cluster
-	gkeDir := copyModuleToTemp(t, "gke")
+	// Step 2: Set up GKE terraform options (before VPC apply, for cleanup registration)
+	gkeDir := CopyModuleToTemp(t, "gke")
 	clusterName := fmt.Sprintf("gke-test-%s", suffix)
 
+	// We'll set the actual network values after VPC is created
 	gkeTf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir:    gkeDir,
 		TerraformBinary: "tofu",
@@ -58,17 +61,38 @@ func TestGKE_CreateDescribeDestroy(t *testing.T) {
 			"project_id":           projectID,
 			"region":               region,
 			"cluster_name":         clusterName,
-			"network_id":           networkID,
-			"subnet_id":            subnetID,
-			"pods_range_name":      podsRangeName,
-			"services_range_name":  servicesRangeName,
+			"network_id":           "", // Will be set after VPC creation
+			"subnet_id":            "", // Will be set after VPC creation
+			"pods_range_name":      "", // Will be set after VPC creation
+			"services_range_name":  "", // Will be set after VPC creation
 			"deletion_protection":  false,
 			"enable_container_api": true,
 		},
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, gkeTf)
+	// Register cleanup for both resources BEFORE creating anything.
+	// Order matters: GKE cleanup runs first (registered second), then VPC (registered first).
+	// t.Cleanup() runs in LIFO order.
+	DeferredTerraformCleanup(t, vpcTf)
+	DeferredTerraformCleanup(t, gkeTf)
+
+	// Now create the VPC
+	terraform.InitAndApply(t, vpcTf)
+
+	// Get VPC outputs and update GKE terraform options
+	networkID := terraform.Output(t, vpcTf, "network_id")
+	subnetID := terraform.Output(t, vpcTf, "subnet_id")
+	podsRangeName := terraform.Output(t, vpcTf, "pods_range_name")
+	servicesRangeName := terraform.Output(t, vpcTf, "services_range_name")
+
+	// Update GKE options with actual VPC values
+	gkeTf.Vars["network_id"] = networkID
+	gkeTf.Vars["subnet_id"] = subnetID
+	gkeTf.Vars["pods_range_name"] = podsRangeName
+	gkeTf.Vars["services_range_name"] = servicesRangeName
+
+	// Create the GKE cluster
 	terraform.InitAndApply(t, gkeTf)
 
 	// Verify cluster was created
@@ -108,9 +132,9 @@ func TestGKE_CreateDescribeDestroy(t *testing.T) {
 // TestGKE_PlanOnly validates the GKE module configuration without creating resources.
 // Use this for quick validation during development.
 func TestGKE_PlanOnly(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
 
-	gkeDir := copyModuleToTemp(t, "gke")
+	gkeDir := CopyModuleToTemp(t, "gke")
 
 	tf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir:    gkeDir,

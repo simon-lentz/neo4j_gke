@@ -18,6 +18,10 @@ variable "bucket_name" {
   type        = string
   description = "Override name for the state bucket (must be globally unique). If null, computed."
   default     = null
+  validation {
+    condition     = var.bucket_name == null || can(regex("^[a-z0-9][-a-z0-9_.]{1,61}[a-z0-9]$", var.bucket_name))
+    error_message = "bucket_name must match GCS naming constraints (3-63 chars, lowercase, start/end with alphanumeric)."
+  }
 }
 
 variable "bucket_versioning" {

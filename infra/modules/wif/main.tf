@@ -1,7 +1,3 @@
-provider "google" {
-  project = var.project_id
-}
-
 # ---- pool (two variants) ----
 resource "google_iam_workload_identity_pool" "pool_protected" {
   count                     = var.prevent_destroy_pool ? 1 : 0

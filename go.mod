@@ -1,4 +1,4 @@
-module github.com/simon-lentz/neo4j_gke/test
+module github.com/simon-lentz/neo4j_gke
 
 go 1.24.9
 

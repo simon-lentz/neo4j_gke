@@ -77,3 +77,9 @@ variable "labels" {
   description = "Labels to apply to the bucket."
   default     = {}
 }
+
+variable "kms_key_name" {
+  type        = string
+  description = "KMS key for bucket encryption. If null, uses Google-managed encryption."
+  default     = null
+}

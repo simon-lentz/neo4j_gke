@@ -53,7 +53,7 @@ gcloud auth application-default set-quota-project "$PROJECT_ID"
 ### **Apply the bootstrap module**
 
 ```bash
-cd infrastructure/iac/modules/bootstrap
+cd infra/modules/bootstrap
 tofu init
 
 # Minimal example (keys co-located)

@@ -22,3 +22,16 @@ module "bootstrap" {
   # Keep the logical path stable across envs; env roots will set their own prefix too.
   backend_prefix = "tofu/state"
 }
+
+# Audit logging for KMS and GCS (DATA_READ/DATA_WRITE audit logs)
+module "audit_logging" {
+  source = "../../modules/audit_logging"
+
+  project_id           = var.project_id
+  logs_bucket_location = var.bucket_location
+
+  enable_kms_audit_logs = var.enable_audit_logging
+  enable_gcs_audit_logs = var.enable_audit_logging
+
+  labels = var.labels
+}

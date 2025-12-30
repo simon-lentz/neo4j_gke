@@ -19,11 +19,14 @@ func TestBootstrapSmoke(t *testing.T) {
 	// Do not parallelize: we adopt a fixed KMS ring/key per project.
 	// t.Parallel()
 
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
-	location := mustEnv(t, "NEO4J_GKE_STATE_BUCKET_LOCATION") // e.g., us-central1
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, DefaultTestTimeout)
+
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	location := MustEnv(t, "NEO4J_GKE_STATE_BUCKET_LOCATION") // e.g., us-central1
 
 	// Work in a temp copy so state and .terraform are isolated per run.
-	tfDir := copyModuleToTemp(t, "bootstrap")
+	tfDir := CopyModuleToTemp(t, "bootstrap")
 
 	unique := strings.ToLower(random.UniqueId())
 
@@ -60,7 +63,10 @@ func TestBootstrapSmoke(t *testing.T) {
 	})
 
 	// Custom cleanup: destroy only ephemeral resources, then untrack KMS in state.
-	defer cleanupEphemeral(t, tf, projectID, bucketName)
+	// Using t.Cleanup() for better cleanup guarantees.
+	t.Cleanup(func() {
+		cleanupEphemeral(t, tf, projectID, bucketName)
+	})
 
 	terraform.Init(t, tf)
 
@@ -286,12 +292,6 @@ func runTofuStateRmE(t *testing.T, tf *terraform.Options, addr string) error {
 	}
 	_, err := shell.RunCommandAndGetStdOutE(t, cmd)
 	return err
-}
-
-func mustEnv(t *testing.T, k string) string {
-	v, ok := os.LookupEnv(k)
-	require.True(t, ok, "missing env %s", k)
-	return v
 }
 
 func requireGcloudBoolTrue(t *testing.T, s string) {

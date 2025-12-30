@@ -101,6 +101,17 @@ resource "kubernetes_network_policy" "allow_neo4j" {
           }
         }
       }
+      # Allow from additional namespaces
+      dynamic "from" {
+        for_each = var.allowed_ingress_namespaces
+        content {
+          namespace_selector {
+            match_labels = {
+              "kubernetes.io/metadata.name" = from.value
+            }
+          }
+        }
+      }
     }
 
     # Allow egress for backups to GCS and DNS resolution
@@ -131,7 +142,7 @@ resource "kubernetes_network_policy" "allow_neo4j" {
 # Neo4j Helm release
 resource "helm_release" "neo4j" {
   name       = var.neo4j_instance_name
-  repository = "https://helm.neo4j.com/neo4j"
+  repository = var.neo4j_helm_repository
   chart      = "neo4j"
   version    = var.neo4j_chart_version
   namespace  = kubernetes_namespace.neo4j.metadata[0].name

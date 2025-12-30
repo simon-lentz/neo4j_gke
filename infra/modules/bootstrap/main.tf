@@ -1,7 +1,3 @@
-provider "google" {
-  project = var.project_id
-}
-
 # Ensure services are enabled before creating KMS & GCS resources
 # Terraform will treat the whole set as a dependency.
 # (This avoids race conditions after enabling APIs.)

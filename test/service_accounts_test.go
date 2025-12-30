@@ -19,9 +19,12 @@ type saInfo struct {
 }
 
 func TestServiceAccounts_CreateDescribeDestroy(t *testing.T) {
-	projectID := mustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+	// Validate timeout before creating resources
+	RequireMinimumTimeout(t, DefaultTestTimeout)
 
-	tfDir := copyModuleToTemp(t, "service_accounts")
+	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
+
+	tfDir := CopyModuleToTemp(t, "service_accounts")
 	suffix := strings.ToLower(random.UniqueId())
 	prefix := fmt.Sprintf("it-%s-", suffix) // keeps ID <= 30 with short keys
 
@@ -42,7 +45,8 @@ func TestServiceAccounts_CreateDescribeDestroy(t *testing.T) {
 		NoColor: true,
 	})
 
-	defer terraform.Destroy(t, tf)
+	// Register cleanup BEFORE creating resources
+	DeferredTerraformCleanup(t, tf)
 	terraform.InitAndApply(t, tf)
 
 	// Parse the output JSON
