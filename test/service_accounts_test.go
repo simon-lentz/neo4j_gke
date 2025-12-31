@@ -19,6 +19,9 @@ type saInfo struct {
 }
 
 func TestServiceAccounts_CreateDescribeDestroy(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, DefaultTestTimeout)
 

@@ -34,3 +34,8 @@ variable "services_ip_range" {
   description = "Secondary IP CIDR range for GKE services."
   default     = "10.2.0.0/20"
 }
+
+variable "state_bucket" {
+  type        = string
+  description = "GCS bucket for OpenTofu state. Used to read bootstrap outputs for CMEK key."
+}

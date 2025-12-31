@@ -1,26 +1,8 @@
-# Neo4j Application - Dev Environment
+# Neo4j Application - Test Environment
 #
-# This layer deploys Neo4j to the GKE cluster provisioned by the platform layer.
-# It configures:
-# - Kubernetes namespace with labels
-# - Service account with Workload Identity for backups
-# - NetworkPolicies for security
-# - Neo4j Helm release
-
-# Read platform layer outputs
-data "terraform_remote_state" "platform" {
-  backend = "gcs"
-  config = {
-    bucket = var.state_bucket
-    prefix = var.environment
-  }
-}
-
-# Read Neo4j admin password from Secret Manager
-data "google_secret_manager_secret_version" "neo4j_password" {
-  project = var.project_id
-  secret  = data.terraform_remote_state.platform.outputs.neo4j_password_secret_id
-}
+# Test variant of the app layer that accepts direct variable inputs
+# instead of reading from terraform_remote_state. This enables
+# integration testing without requiring a state bucket.
 
 # Kubernetes namespace for Neo4j
 resource "kubernetes_namespace" "neo4j" {
@@ -29,7 +11,7 @@ resource "kubernetes_namespace" "neo4j" {
     labels = {
       "app.kubernetes.io/name"       = "neo4j"
       "app.kubernetes.io/managed-by" = "terraform"
-      "environment"                  = var.environment
+      "environment"                  = "test"
     }
   }
 }
@@ -40,7 +22,7 @@ resource "kubernetes_service_account" "neo4j_backup" {
     name      = "neo4j-backup"
     namespace = kubernetes_namespace.neo4j.metadata[0].name
     annotations = {
-      "iam.gke.io/gcp-service-account" = data.terraform_remote_state.platform.outputs.backup_gsa_email
+      "iam.gke.io/gcp-service-account" = var.backup_gsa_email
     }
     labels = {
       "app.kubernetes.io/name"       = "neo4j-backup"
@@ -51,9 +33,9 @@ resource "kubernetes_service_account" "neo4j_backup" {
 
 # Workload Identity binding: GSA -> KSA
 resource "google_service_account_iam_member" "backup_wi_binding" {
-  service_account_id = data.terraform_remote_state.platform.outputs.backup_gsa_name
+  service_account_id = var.backup_gsa_name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${data.terraform_remote_state.platform.outputs.workload_identity_pool}[${kubernetes_namespace.neo4j.metadata[0].name}/${kubernetes_service_account.neo4j_backup.metadata[0].name}]"
+  member             = "serviceAccount:${var.workload_identity_pool}[${kubernetes_namespace.neo4j.metadata[0].name}/${kubernetes_service_account.neo4j_backup.metadata[0].name}]"
 }
 
 # Default deny NetworkPolicy - block all traffic by default
@@ -166,10 +148,10 @@ resource "helm_release" "neo4j" {
   # Use values file for base configuration
   values = [file("${path.module}/values/neo4j.yaml")]
 
-  # Override sensitive values
+  # Override sensitive values (direct password input for testing)
   set_sensitive {
     name  = "neo4j.password"
-    value = data.google_secret_manager_secret_version.neo4j_password.secret_data
+    value = var.neo4j_password
   }
 
   # Override instance name

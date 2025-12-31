@@ -4,8 +4,17 @@
 # - VPC with Cloud NAT for private GKE nodes
 # - GKE Autopilot cluster with Workload Identity
 # - Service account for Neo4j backups
-# - GCS bucket for backup storage
+# - GCS bucket for backup storage (CMEK encrypted)
 # - Secret Manager secrets for credentials
+
+# Read bootstrap state for CMEK key
+data "terraform_remote_state" "bootstrap" {
+  backend = "gcs"
+  config = {
+    bucket = var.state_bucket
+    prefix = "bootstrap"
+  }
+}
 
 # VPC Network
 module "vpc" {
@@ -24,6 +33,9 @@ module "vpc" {
 }
 
 # GKE Autopilot Cluster
+# Note: enable_private_endpoint defaults to false for dev convenience.
+# Production deployments should set enable_private_endpoint = true
+# and configure master_authorized_networks for VPN/bastion access.
 module "gke" {
   source              = "../../modules/gke"
   project_id          = var.project_id
@@ -65,7 +77,14 @@ module "backup_sa" {
   prevent_destroy_service_accounts = false
 }
 
-# Backup Bucket
+# Grant backup service account permission to use CMEK key
+resource "google_kms_crypto_key_iam_member" "backup_sa_kms" {
+  crypto_key_id = data.terraform_remote_state.bootstrap.outputs.state.kms_key_name
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${module.backup_sa.service_accounts["neo4j-backup"].email}"
+}
+
+# Backup Bucket (CMEK encrypted using bootstrap key)
 module "backup_bucket" {
   source          = "../../modules/backup_bucket"
   project_id      = var.project_id
@@ -73,11 +92,16 @@ module "backup_bucket" {
   location        = var.region
   backup_sa_email = module.backup_sa.service_accounts["neo4j-backup"].email
 
+  # CMEK encryption using bootstrap key
+  kms_key_name = data.terraform_remote_state.bootstrap.outputs.state.kms_key_name
+
   # Retention settings
   backup_retention_days   = 30
   backup_versions_to_keep = 5
 
-  # Dev settings - allow destruction for cleanup
+  # WARNING: Dev-only setting - allows bucket deletion even with backup data.
+  # Production environments MUST set force_destroy = false to prevent
+  # accidental data loss. See backup_bucket module README for guidance.
   force_destroy = true
 
   labels = {
@@ -85,6 +109,8 @@ module "backup_bucket" {
     purpose     = "neo4j-backup"
     managed_by  = "tofu"
   }
+
+  depends_on = [google_kms_crypto_key_iam_member.backup_sa_kms]
 }
 
 # Secrets for Neo4j credentials

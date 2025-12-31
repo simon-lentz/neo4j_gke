@@ -108,7 +108,8 @@ func TestBootstrapSmoke(t *testing.T) {
 	requireGcloudBoolEquals(t, out, false)
 
 	// 4) Default KMS key set and usable (we only need the field presence)
-	stateObj := terraform.Output(t, tf, "state")
+	stateObj, outputErr := terraform.OutputE(t, tf, "state")
+	require.NoError(t, outputErr, "failed to get state output")
 	require.Contains(t, stateObj, "kms_key_name")
 
 	// 5) Simple write/read roundtrip
@@ -208,102 +209,4 @@ func kmsCryptoKeyExists(t *testing.T, project, location, ring, key string) bool 
 	}
 	_, err := shell.RunCommandAndGetStdOutE(t, cmd)
 	return err == nil
-}
-
-// --- generic gcloud wrappers ---
-func runGCLOUD(t *testing.T, project string, args ...string) string {
-	cmd := shell.Command{
-		Command: "gcloud",
-		Args:    append([]string{"--project", project}, args...),
-	}
-	out, err := shell.RunCommandAndGetStdOutE(t, cmd)
-	require.NoError(t, err)
-	return out
-}
-
-func runGCLOUDNoOut(t *testing.T, project string, args ...string) {
-	cmd := shell.Command{
-		Command: "gcloud",
-		Args:    append([]string{"--project", project}, args...),
-	}
-	err := shell.RunCommandE(t, cmd)
-	require.NoError(t, err)
-}
-
-func runGCLOUDNoOutE(t *testing.T, project string, args ...string) error {
-	cmd := shell.Command{
-		Command: "gcloud",
-		Args:    append([]string{"--project", project}, args...),
-	}
-	return shell.RunCommandE(t, cmd)
-}
-
-// --- generic tofu wrappers: put flags after the subcommand ---
-func runTofu(t *testing.T, tf *terraform.Options, tfvarsPath string, args ...string) {
-	require.GreaterOrEqual(t, len(args), 1, "tofu subcommand required")
-	sub := args[0]
-	rest := args[1:]
-
-	finalArgs := []string{sub, "-input=false", "-no-color"}
-	// Only pass -var-file for commands that load configuration
-	if sub != "state" && tfvarsPath != "" {
-		finalArgs = append(finalArgs, "-var-file="+tfvarsPath)
-	}
-	finalArgs = append(finalArgs, rest...)
-
-	cmd := shell.Command{
-		Command:    tf.TerraformBinary, // "tofu"
-		Args:       finalArgs,
-		WorkingDir: tf.TerraformDir,
-		Env:        tf.EnvVars,
-	}
-	out, err := shell.RunCommandAndGetStdOutE(t, cmd)
-	require.NoErrorf(t, err, "%s %v failed: %s", tf.TerraformBinary, finalArgs, out)
-}
-
-func runTofuE(t *testing.T, tf *terraform.Options, tfvarsPath string, args ...string) error {
-	require.GreaterOrEqual(t, len(args), 1, "tofu subcommand required")
-	sub := args[0]
-	rest := args[1:]
-
-	finalArgs := []string{sub, "-input=false", "-no-color"}
-	if sub != "state" && tfvarsPath != "" {
-		finalArgs = append(finalArgs, "-var-file="+tfvarsPath)
-	}
-	finalArgs = append(finalArgs, rest...)
-
-	cmd := shell.Command{
-		Command:    tf.TerraformBinary,
-		Args:       finalArgs,
-		WorkingDir: tf.TerraformDir,
-		Env:        tf.EnvVars,
-	}
-	_, err := shell.RunCommandAndGetStdOutE(t, cmd)
-	return err
-}
-
-// 'tofu state' commands do not need variables; keep a separate helper.
-func runTofuStateRmE(t *testing.T, tf *terraform.Options, addr string) error {
-	cmd := shell.Command{
-		Command:    tf.TerraformBinary,
-		Args:       []string{"state", "rm", addr},
-		WorkingDir: tf.TerraformDir,
-		Env:        tf.EnvVars,
-	}
-	_, err := shell.RunCommandAndGetStdOutE(t, cmd)
-	return err
-}
-
-func requireGcloudBoolTrue(t *testing.T, s string) {
-	v := strings.ToLower(strings.TrimSpace(s))
-	require.Equal(t, "true", v)
-}
-
-func requireGcloudBoolEquals(t *testing.T, s string, want bool) {
-	v := strings.ToLower(strings.TrimSpace(s))
-	if want {
-		require.Equal(t, "true", v)
-	} else {
-		require.Equal(t, "false", v)
-	}
 }

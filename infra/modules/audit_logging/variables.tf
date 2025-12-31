@@ -43,6 +43,12 @@ variable "enable_gcs_audit_logs" {
   default     = true
 }
 
+variable "enable_log_sink" {
+  type        = bool
+  description = "Create Cloud Logging sink to route audit logs to GCS bucket."
+  default     = true
+}
+
 variable "log_retention_days" {
   type        = number
   description = "Number of days to retain logs in the bucket before deletion."

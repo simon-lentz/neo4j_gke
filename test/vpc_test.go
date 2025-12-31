@@ -16,6 +16,9 @@ import (
 //
 //	go test -timeout 15m -v ./test/... -run TestVPC_CreateDescribeDestroy
 func TestVPC_CreateDescribeDestroy(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, VPCTestTimeout)
 
@@ -43,18 +46,22 @@ func TestVPC_CreateDescribeDestroy(t *testing.T) {
 	terraform.InitAndApply(t, tf)
 
 	// Verify VPC exists
-	networkName := terraform.Output(t, tf, "network_name")
+	networkName, err := terraform.OutputE(t, tf, "network_name")
+	require.NoError(t, err, "failed to get network_name output")
 	require.Equal(t, vpcName, networkName)
 
 	// Verify subnet exists with secondary ranges
-	subnetName := terraform.Output(t, tf, "subnet_name")
+	subnetName, err := terraform.OutputE(t, tf, "subnet_name")
+	require.NoError(t, err, "failed to get subnet_name output")
 	require.NotEmpty(t, subnetName)
 
 	// Verify secondary range names
-	podsRangeName := terraform.Output(t, tf, "pods_range_name")
+	podsRangeName, err := terraform.OutputE(t, tf, "pods_range_name")
+	require.NoError(t, err, "failed to get pods_range_name output")
 	require.Equal(t, "pods", podsRangeName)
 
-	servicesRangeName := terraform.Output(t, tf, "services_range_name")
+	servicesRangeName, err := terraform.OutputE(t, tf, "services_range_name")
+	require.NoError(t, err, "failed to get services_range_name output")
 	require.Equal(t, "services", servicesRangeName)
 
 	// Verify VPC exists via gcloud
@@ -76,7 +83,8 @@ func TestVPC_CreateDescribeDestroy(t *testing.T) {
 	require.Equal(t, "pods", strings.TrimSpace(out))
 
 	// Verify Cloud NAT exists
-	natName := terraform.Output(t, tf, "nat_name")
+	natName, err := terraform.OutputE(t, tf, "nat_name")
+	require.NoError(t, err, "failed to get nat_name output")
 	require.NotEmpty(t, natName)
 
 	out = runGCLOUD(t, projectID, "compute", "routers", "nats", "describe", natName,
@@ -85,6 +93,9 @@ func TestVPC_CreateDescribeDestroy(t *testing.T) {
 }
 
 func TestVPC_WithoutCloudNAT(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, VPCTestTimeout)
 
@@ -112,7 +123,8 @@ func TestVPC_WithoutCloudNAT(t *testing.T) {
 	terraform.InitAndApply(t, tf)
 
 	// Verify VPC exists
-	networkName := terraform.Output(t, tf, "network_name")
+	networkName, err := terraform.OutputE(t, tf, "network_name")
+	require.NoError(t, err, "failed to get network_name output")
 	require.Equal(t, vpcName, networkName)
 
 	// Verify no NAT was created - outputs are null when NAT disabled,

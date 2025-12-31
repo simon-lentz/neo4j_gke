@@ -11,6 +11,9 @@ import (
 )
 
 func TestBackupBucket_CreateDescribeDestroy(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, DefaultTestTimeout)
 
@@ -69,10 +72,12 @@ func TestBackupBucket_CreateDescribeDestroy(t *testing.T) {
 	terraform.InitAndApply(t, tf)
 
 	// Verify bucket was created
-	outputBucketName := terraform.Output(t, tf, "bucket_name")
+	outputBucketName, err := terraform.OutputE(t, tf, "bucket_name")
+	require.NoError(t, err, "failed to get bucket_name output")
 	require.Equal(t, bucketName, outputBucketName)
 
-	bucketURL := terraform.Output(t, tf, "bucket_url")
+	bucketURL, err := terraform.OutputE(t, tf, "bucket_url")
+	require.NoError(t, err, "failed to get bucket_url output")
 	require.Equal(t, fmt.Sprintf("gs://%s", bucketName), bucketURL)
 
 	// Verify bucket exists via gcloud
@@ -102,6 +107,9 @@ func TestBackupBucket_CreateDescribeDestroy(t *testing.T) {
 }
 
 func TestBackupBucket_WithoutVersioning(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, DefaultTestTimeout)
 

@@ -24,7 +24,6 @@ import (
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/require"
 
-	// Import test helpers from the main test package
 	testhelpers "github.com/simon-lentz/neo4j_gke/test"
 )
 
@@ -43,6 +42,9 @@ const Neo4jTestTimeout = 45 * time.Minute
 // Required environment variables:
 //   - NEO4J_GKE_GCP_PROJECT_ID: GCP project ID
 func TestNeo4j_FullDeployment(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// CRITICAL: Validate timeout BEFORE creating any resources.
 	testhelpers.RequireMinimumTimeout(t, Neo4jTestTimeout)
 
@@ -147,10 +149,14 @@ func TestNeo4j_FullDeployment(t *testing.T) {
 	// -------------------------------------------------------------------------
 	terraform.InitAndApply(t, vpcTf)
 
-	networkID := terraform.Output(t, vpcTf, "network_id")
-	subnetID := terraform.Output(t, vpcTf, "subnet_id")
-	podsRangeName := terraform.Output(t, vpcTf, "pods_range_name")
-	servicesRangeName := terraform.Output(t, vpcTf, "services_range_name")
+	networkID, err := terraform.OutputE(t, vpcTf, "network_id")
+	require.NoError(t, err, "failed to get network_id output")
+	subnetID, err := terraform.OutputE(t, vpcTf, "subnet_id")
+	require.NoError(t, err, "failed to get subnet_id output")
+	podsRangeName, err := terraform.OutputE(t, vpcTf, "pods_range_name")
+	require.NoError(t, err, "failed to get pods_range_name output")
+	servicesRangeName, err := terraform.OutputE(t, vpcTf, "services_range_name")
+	require.NoError(t, err, "failed to get services_range_name output")
 
 	t.Logf("VPC created: %s (network_id: %s)", vpcName, networkID)
 
@@ -158,15 +164,31 @@ func TestNeo4j_FullDeployment(t *testing.T) {
 	// Apply GKE with VPC outputs
 	// -------------------------------------------------------------------------
 	t.Log("Step 2: Creating GKE Autopilot cluster (this takes 15-20 minutes)...")
-	gkeTf.Vars["network_id"] = networkID
-	gkeTf.Vars["subnet_id"] = subnetID
-	gkeTf.Vars["pods_range_name"] = podsRangeName
-	gkeTf.Vars["services_range_name"] = servicesRangeName
 
-	terraform.InitAndApply(t, gkeTf)
+	// Create new GKE options with actual VPC values (avoid mutating original)
+	gkeTfApply := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+		TerraformDir:    gkeDir,
+		TerraformBinary: "tofu",
+		Vars: map[string]any{
+			"project_id":           projectID,
+			"region":               region,
+			"cluster_name":         clusterName,
+			"network_id":           networkID,
+			"subnet_id":            subnetID,
+			"pods_range_name":      podsRangeName,
+			"services_range_name":  servicesRangeName,
+			"deletion_protection":  false,
+			"enable_container_api": true,
+		},
+		NoColor: true,
+	})
 
-	clusterEndpoint := terraform.Output(t, gkeTf, "cluster_endpoint")
-	workloadIdentityPool := terraform.Output(t, gkeTf, "workload_identity_pool")
+	terraform.InitAndApply(t, gkeTfApply)
+
+	clusterEndpoint, err := terraform.OutputE(t, gkeTfApply, "cluster_endpoint")
+	require.NoError(t, err, "failed to get cluster_endpoint output")
+	workloadIdentityPool, err := terraform.OutputE(t, gkeTfApply, "workload_identity_pool")
+	require.NoError(t, err, "failed to get workload_identity_pool output")
 	require.NotEmpty(t, clusterEndpoint)
 	require.Equal(t, fmt.Sprintf("%s.svc.id.goog", projectID), workloadIdentityPool)
 
@@ -185,52 +207,91 @@ func TestNeo4j_FullDeployment(t *testing.T) {
 	t.Log("Step 4: Creating backup bucket...")
 	terraform.InitAndApply(t, bucketTf)
 
-	backupBucketURL := terraform.Output(t, bucketTf, "bucket_url")
+	backupBucketURL, err := terraform.OutputE(t, bucketTf, "bucket_url")
+	require.NoError(t, err, "failed to get bucket_url output")
 	require.Equal(t, fmt.Sprintf("gs://%s", backupBucketName), backupBucketURL)
 	t.Logf("Backup bucket created: %s", backupBucketName)
 
 	// -------------------------------------------------------------------------
-	// Step 5: Set up kubeconfig
+	// Step 5: Deploy Neo4j via App Layer Terraform
 	// -------------------------------------------------------------------------
-	t.Log("Step 5: Setting up kubeconfig...")
-	kubeconfigPath := setupKubeconfig(t, projectID, region, clusterName)
+	t.Log("Step 5: Deploying Neo4j via app layer Terraform...")
 
-	// -------------------------------------------------------------------------
-	// Step 6: Deploy Neo4j via Helm
-	// -------------------------------------------------------------------------
-	t.Log("Step 6: Deploying Neo4j via Helm...")
-	neo4jNamespace := "neo4j"
+	// Get service account resource name for WIF binding
+	backupGSAEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", backupSAName, projectID)
+	backupGSAName := fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, backupGSAEmail)
+
 	neo4jInstanceName := fmt.Sprintf("neo4j-%s", suffix)
 	testPassword := fmt.Sprintf("test-pwd-%s", random.UniqueId())
 
-	// Create namespace
-	kubectlOptions := k8s.NewKubectlOptions("", kubeconfigPath, "")
-	createNamespaceIfNotExists(t, kubectlOptions, neo4jNamespace)
+	appDir := testhelpers.CopyAppModuleToTemp(t, "neo4j/test")
 
-	// Deploy Neo4j
-	deployNeo4jHelm(t, kubeconfigPath, neo4jNamespace, neo4jInstanceName, testPassword)
-
-	// Register cleanup for Helm release
-	t.Cleanup(func() {
-		t.Log("Cleaning up Neo4j Helm release...")
-		deleteNeo4jHelm(t, kubeconfigPath, neo4jNamespace, neo4jInstanceName)
+	appTf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+		TerraformDir:    appDir,
+		TerraformBinary: "tofu",
+		Vars: map[string]any{
+			"project_id":             projectID,
+			"region":                 region,
+			"cluster_name":           clusterName,
+			"cluster_location":       region,
+			"workload_identity_pool": workloadIdentityPool,
+			"backup_gsa_email":       backupGSAEmail,
+			"backup_gsa_name":        backupGSAName,
+			"backup_bucket_url":      backupBucketURL,
+			"neo4j_password":         testPassword,
+			"neo4j_instance_name":    neo4jInstanceName,
+			"neo4j_namespace":        "neo4j",
+		},
+		NoColor: true,
 	})
 
-	t.Logf("Neo4j Helm release deployed: %s", neo4jInstanceName)
+	// Register cleanup for app layer (runs before bucket/SA/GKE/VPC due to LIFO)
+	testhelpers.DeferredTerraformCleanup(t, appTf)
+
+	terraform.InitAndApply(t, appTf)
+
+	// Verify app layer outputs
+	namespace, err := terraform.OutputE(t, appTf, "namespace")
+	require.NoError(t, err, "failed to get namespace output")
+	require.Equal(t, "neo4j", namespace)
+
+	wiBindingMember, err := terraform.OutputE(t, appTf, "wi_binding_member")
+	require.NoError(t, err, "failed to get wi_binding_member output")
+	require.Contains(t, wiBindingMember, "neo4j-backup")
+
+	defaultDenyPolicy, err := terraform.OutputE(t, appTf, "network_policy_default_deny")
+	require.NoError(t, err, "failed to get network_policy_default_deny output")
+	require.Equal(t, "default-deny-all", defaultDenyPolicy)
+
+	allowNeo4jPolicy, err := terraform.OutputE(t, appTf, "network_policy_allow_neo4j")
+	require.NoError(t, err, "failed to get network_policy_allow_neo4j output")
+	require.Equal(t, "allow-neo4j", allowNeo4jPolicy)
+
+	t.Logf("Neo4j app layer deployed: instance=%s, namespace=%s", neo4jInstanceName, namespace)
 
 	// -------------------------------------------------------------------------
-	// Step 7: Wait for Neo4j to be ready
+	// Step 6: Set up kubeconfig and wait for Neo4j
 	// -------------------------------------------------------------------------
-	t.Log("Step 7: Waiting for Neo4j pod to be ready...")
-	kubectlOptionsNs := k8s.NewKubectlOptions("", kubeconfigPath, neo4jNamespace)
+	t.Log("Step 6: Waiting for Neo4j pod to be ready...")
+	kubeconfigPath := setupKubeconfig(t, projectID, region, clusterName)
+	kubectlOptionsNs := k8s.NewKubectlOptions("", kubeconfigPath, "neo4j")
 	waitForNeo4jReady(t, kubectlOptionsNs, neo4jInstanceName, 10*time.Minute)
 	t.Log("Neo4j pod is ready")
 
 	// -------------------------------------------------------------------------
-	// Step 8: Verify Neo4j is running
+	// Step 7: Verify Neo4j is running
 	// -------------------------------------------------------------------------
-	t.Log("Step 8: Verifying Neo4j is running...")
+	t.Log("Step 7: Verifying Neo4j is running...")
 	verifyNeo4jRunning(t, kubectlOptionsNs, neo4jInstanceName)
+
+	// Additional verification: check NetworkPolicies exist via kubectl
+	t.Log("Step 7b: Verifying NetworkPolicies via kubectl...")
+	policies, err := k8s.RunKubectlAndGetOutputE(t, kubectlOptionsNs, "get", "networkpolicy",
+		"-o", "jsonpath={.items[*].metadata.name}")
+	require.NoError(t, err)
+	require.Contains(t, policies, "default-deny-all")
+	require.Contains(t, policies, "allow-neo4j")
+	t.Logf("NetworkPolicies verified: %s", policies)
 
 	t.Log("Neo4j full deployment test PASSED!")
 }
@@ -255,83 +316,6 @@ func setupKubeconfig(t *testing.T, projectID, region, clusterName string) string
 	require.NoError(t, shell.RunCommandE(t, cmd))
 
 	return kubeconfigPath
-}
-
-// createNamespaceIfNotExists creates a Kubernetes namespace if it does not exist.
-func createNamespaceIfNotExists(t *testing.T, options *k8s.KubectlOptions, namespace string) {
-	t.Helper()
-
-	_, err := k8s.RunKubectlAndGetOutputE(t, options, "get", "namespace", namespace)
-	if err != nil {
-		k8s.RunKubectl(t, options, "create", "namespace", namespace)
-	}
-}
-
-// deployNeo4jHelm deploys Neo4j using Helm.
-func deployNeo4jHelm(t *testing.T, kubeconfigPath, namespace, releaseName, password string) {
-	t.Helper()
-
-	// Add Helm repo
-	addRepoCmd := shell.Command{
-		Command: "helm",
-		Args:    []string{"repo", "add", "neo4j", "https://helm.neo4j.com/neo4j"},
-		Env: map[string]string{
-			"KUBECONFIG": kubeconfigPath,
-		},
-	}
-	_ = shell.RunCommandE(t, addRepoCmd) // Ignore error if repo already exists
-
-	// Update repo
-	updateRepoCmd := shell.Command{
-		Command: "helm",
-		Args:    []string{"repo", "update"},
-		Env: map[string]string{
-			"KUBECONFIG": kubeconfigPath,
-		},
-	}
-	require.NoError(t, shell.RunCommandE(t, updateRepoCmd))
-
-	// Install Neo4j
-	installCmd := shell.Command{
-		Command: "helm",
-		Args: []string{
-			"install", releaseName,
-			"neo4j/neo4j",
-			"--namespace", namespace,
-			"--set", "neo4j.edition=community",
-			"--set", fmt.Sprintf("neo4j.password=%s", password),
-			"--set", fmt.Sprintf("neo4j.name=%s", releaseName),
-			"--set", "services.neo4j.enabled=false",
-			"--set", "services.default.enabled=true",
-			"--set", "services.default.type=ClusterIP",
-			"--set", "volumes.data.mode=defaultStorageClass",
-			"--set", "volumes.data.defaultStorageClass.requests.storage=10Gi",
-			"--timeout", "10m",
-			"--wait",
-		},
-		Env: map[string]string{
-			"KUBECONFIG": kubeconfigPath,
-		},
-	}
-	require.NoError(t, shell.RunCommandE(t, installCmd))
-}
-
-// deleteNeo4jHelm removes the Neo4j Helm release.
-func deleteNeo4jHelm(t *testing.T, kubeconfigPath, namespace, releaseName string) {
-	t.Helper()
-
-	cmd := shell.Command{
-		Command: "helm",
-		Args: []string{
-			"uninstall", releaseName,
-			"--namespace", namespace,
-			"--timeout", "5m",
-		},
-		Env: map[string]string{
-			"KUBECONFIG": kubeconfigPath,
-		},
-	}
-	_ = shell.RunCommandE(t, cmd) // Best-effort cleanup
 }
 
 // waitForNeo4jReady waits for the Neo4j StatefulSet pod to be ready.
@@ -382,8 +366,9 @@ func verifyNeo4jRunning(t *testing.T, options *k8s.KubectlOptions, releaseName s
 	require.Contains(t, strings.ToLower(logs), "started", "Neo4j logs should indicate successful startup")
 
 	// Verify services exist
+	// Neo4j Helm chart uses "app" label (set to neo4j.name value), not app.kubernetes.io/instance
 	services, err := k8s.RunKubectlAndGetOutputE(t, options, "get", "svc",
-		"-l", fmt.Sprintf("app.kubernetes.io/instance=%s", releaseName),
+		"-l", fmt.Sprintf("app=%s", releaseName),
 		"-o", "jsonpath={.items[*].metadata.name}")
 	require.NoError(t, err)
 	require.NotEmpty(t, services, "Neo4j services should exist")

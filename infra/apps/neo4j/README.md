@@ -146,6 +146,60 @@ neo4j-admin database backup \
 - **Workload Identity**: Backup SA uses WIF instead of exported keys
 - **Secret Manager**: Password stored in GCP Secret Manager, not in state
 
+### Pod Security Context
+
+The Helm values configure pod-level security hardening:
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `runAsNonRoot` | `true` | Prevent running as root user |
+| `runAsUser/runAsGroup` | `7474` | Standard Neo4j UID in official images |
+| `fsGroup` | `7474` | Enable group access to persistent volumes |
+| `seccompProfile` | `RuntimeDefault` | Apply default seccomp sandboxing |
+| `allowPrivilegeEscalation` | `false` | Prevent container privilege escalation |
+| `capabilities.drop` | `ALL` | Remove all Linux capabilities |
+
+**Note:** `readOnlyRootFilesystem` is intentionally **not set to true** because Neo4j requires write access to:
+- `/var/lib/neo4j/data` - Database files
+- `/var/lib/neo4j/logs` - Query and transaction logs
+- `/tmp` - Temporary files
+
+**GKE Autopilot:** The cluster automatically enforces Pod Security Standards at the "restricted" profile level, providing additional security constraints beyond what's configured here.
+
+## Production TLS Configuration
+
+The dev environment uses permissive TLS settings for convenience. Production deployments must harden these settings:
+
+1. **Enable TLS for Bolt connections:**
+   ```yaml
+   server.bolt.tls_level: "REQUIRED"
+   ```
+
+2. **Disable HTTP, enable HTTPS:**
+   ```yaml
+   server.http.enabled: "false"
+   server.https.enabled: "true"
+   ```
+
+3. **Provision TLS certificates** using one of:
+   - cert-manager with Let's Encrypt
+   - Self-signed certificates for internal use
+   - Externally provisioned certificates
+
+4. **Mount certificate secret** in Neo4j pod via Helm values:
+   ```yaml
+   ssl:
+     bolt:
+       privateKey:
+         secretName: neo4j-tls
+         subPath: tls.key
+       publicCertificate:
+         secretName: neo4j-tls
+         subPath: tls.crt
+   ```
+
+See `dev/values/neo4j.yaml` for detailed comments on each TLS setting.
+
 ## Adding a New Environment
 
 To add a production environment:

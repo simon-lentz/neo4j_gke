@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/random"
-	"github.com/gruntwork-io/terratest/modules/shell"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWIF_CreateDescribeDestroy(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, DefaultTestTimeout)
 
@@ -41,10 +43,11 @@ func TestWIF_CreateDescribeDestroy(t *testing.T) {
 	DeferredTerraformCleanup(t, tf)
 	terraform.InitAndApply(t, tf)
 
-	providerName := terraform.Output(t, tf, "provider_name")
+	providerName, err := terraform.OutputE(t, tf, "provider_name")
+	require.NoError(t, err, "failed to get provider_name output")
 
 	// gcloud describe the provider and assert issuer + condition
-	out := run(t, "gcloud", "iam", "workload-identity-pools", "providers", "describe",
+	out := runGCLOUD(t, projectID, "iam", "workload-identity-pools", "providers", "describe",
 		providerName,
 		"--format=value(oidc.issuerUri,attributeCondition)",
 	)
@@ -57,6 +60,9 @@ func TestWIF_CreateDescribeDestroy(t *testing.T) {
 }
 
 func TestWIF_PreconditionFailsWithoutSelectors(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
 	tfDir := CopyModuleToTemp(t, "wif")
 	suffix := strings.ToLower(random.UniqueId())
@@ -79,11 +85,4 @@ func TestWIF_PreconditionFailsWithoutSelectors(t *testing.T) {
 	_, err := terraform.InitAndPlanE(t, tf)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "You must specify at least one selector")
-}
-
-func run(t *testing.T, cmd string, args ...string) string {
-	c := shell.Command{Command: cmd, Args: args}
-	out, err := shell.RunCommandAndGetStdOutE(t, c)
-	require.NoError(t, err)
-	return out
 }

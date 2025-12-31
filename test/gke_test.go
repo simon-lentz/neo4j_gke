@@ -19,6 +19,9 @@ import (
 //
 // The test will fail fast if the timeout is insufficient, preventing orphaned resources.
 func TestGKE_CreateDescribeDestroy(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	if testing.Short() {
 		t.Skip("Skipping GKE integration test in short mode (takes 15-20 minutes)")
 	}
@@ -80,27 +83,45 @@ func TestGKE_CreateDescribeDestroy(t *testing.T) {
 	// Now create the VPC
 	terraform.InitAndApply(t, vpcTf)
 
-	// Get VPC outputs and update GKE terraform options
-	networkID := terraform.Output(t, vpcTf, "network_id")
-	subnetID := terraform.Output(t, vpcTf, "subnet_id")
-	podsRangeName := terraform.Output(t, vpcTf, "pods_range_name")
-	servicesRangeName := terraform.Output(t, vpcTf, "services_range_name")
+	// Get VPC outputs
+	networkID, err := terraform.OutputE(t, vpcTf, "network_id")
+	require.NoError(t, err, "failed to get network_id output")
+	subnetID, err := terraform.OutputE(t, vpcTf, "subnet_id")
+	require.NoError(t, err, "failed to get subnet_id output")
+	podsRangeName, err := terraform.OutputE(t, vpcTf, "pods_range_name")
+	require.NoError(t, err, "failed to get pods_range_name output")
+	servicesRangeName, err := terraform.OutputE(t, vpcTf, "services_range_name")
+	require.NoError(t, err, "failed to get services_range_name output")
 
-	// Update GKE options with actual VPC values
-	gkeTf.Vars["network_id"] = networkID
-	gkeTf.Vars["subnet_id"] = subnetID
-	gkeTf.Vars["pods_range_name"] = podsRangeName
-	gkeTf.Vars["services_range_name"] = servicesRangeName
+	// Create new GKE options with actual VPC values (avoid mutating original)
+	gkeTfApply := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+		TerraformDir:    gkeDir,
+		TerraformBinary: "tofu",
+		Vars: map[string]any{
+			"project_id":           projectID,
+			"region":               region,
+			"cluster_name":         clusterName,
+			"network_id":           networkID,
+			"subnet_id":            subnetID,
+			"pods_range_name":      podsRangeName,
+			"services_range_name":  servicesRangeName,
+			"deletion_protection":  false,
+			"enable_container_api": true,
+		},
+		NoColor: true,
+	})
 
 	// Create the GKE cluster
-	terraform.InitAndApply(t, gkeTf)
+	terraform.InitAndApply(t, gkeTfApply)
 
 	// Verify cluster was created
-	outputClusterName := terraform.Output(t, gkeTf, "cluster_name")
+	outputClusterName, err := terraform.OutputE(t, gkeTfApply, "cluster_name")
+	require.NoError(t, err, "failed to get cluster_name output")
 	require.Equal(t, clusterName, outputClusterName)
 
 	// Verify Workload Identity pool
-	wiPool := terraform.Output(t, gkeTf, "workload_identity_pool")
+	wiPool, err := terraform.OutputE(t, gkeTfApply, "workload_identity_pool")
+	require.NoError(t, err, "failed to get workload_identity_pool output")
 	require.Equal(t, fmt.Sprintf("%s.svc.id.goog", projectID), wiPool)
 
 	// Verify cluster exists via gcloud
@@ -132,6 +153,9 @@ func TestGKE_CreateDescribeDestroy(t *testing.T) {
 // TestGKE_PlanOnly validates the GKE module configuration without creating resources.
 // Use this for quick validation during development.
 func TestGKE_PlanOnly(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	projectID := MustEnv(t, "NEO4J_GKE_GCP_PROJECT_ID")
 
 	gkeDir := CopyModuleToTemp(t, "gke")

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gruntwork-io/terratest/modules/shell"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	testStructure "github.com/gruntwork-io/terratest/modules/test-structure"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,9 @@ const (
 )
 
 // RequireMinimumTimeout validates that the test has sufficient timeout configured.
-// This prevents tests from timing out before cleanup can run.
+// If the timeout is insufficient, the test is skipped rather than failed.
+// This prevents tests from timing out before cleanup can run while allowing
+// quick test runs (e.g., -short mode or default timeout) to skip long tests gracefully.
 // Call this at the start of any test that creates cloud resources.
 func RequireMinimumTimeout(t *testing.T, minimumTimeout time.Duration) {
 	t.Helper()
@@ -35,8 +38,8 @@ func RequireMinimumTimeout(t *testing.T, minimumTimeout time.Duration) {
 	timeout := getTestTimeout()
 
 	if timeout > 0 && timeout < minimumTimeout {
-		t.Fatalf("Test timeout (%v) is less than minimum required (%v). "+
-			"Run with -timeout=%v or higher to ensure cleanup runs. "+
+		t.Skipf("Skipping: test timeout (%v) is less than minimum required (%v). "+
+			"Run with -timeout=%v or higher. "+
 			"Example: go test -timeout=%v ./test/...",
 			timeout, minimumTimeout, minimumTimeout, minimumTimeout)
 	}
@@ -162,6 +165,18 @@ func CopyModuleToTemp(t *testing.T, moduleRelativePath string) string {
 	)
 }
 
+// CopyAppModuleToTemp copies an app layer module to a temp directory for testing.
+// The appPath should be relative to infra/apps/ (e.g., "neo4j/test").
+func CopyAppModuleToTemp(t *testing.T, appPath string) string {
+	t.Helper()
+
+	return testStructure.CopyTerraformFolderToTemp(
+		t,
+		RepoRoot(t),
+		filepath.Join("infra", "apps", appPath),
+	)
+}
+
 // GetTestRegion returns the GCP region for tests, defaulting to us-central1.
 // Override via NEO4J_GKE_TEST_REGION environment variable.
 func GetTestRegion(t *testing.T) string {
@@ -171,4 +186,124 @@ func GetTestRegion(t *testing.T) string {
 		region = "us-central1"
 	}
 	return region
+}
+
+// --- gcloud wrappers ---
+
+// runGCLOUD executes a gcloud command and returns stdout.
+func runGCLOUD(t *testing.T, project string, args ...string) string {
+	t.Helper()
+	cmd := shell.Command{
+		Command: "gcloud",
+		Args:    append([]string{"--project", project}, args...),
+	}
+	out, err := shell.RunCommandAndGetStdOutE(t, cmd)
+	require.NoError(t, err)
+	return out
+}
+
+// runGCLOUDNoOut executes a gcloud command without capturing output.
+func runGCLOUDNoOut(t *testing.T, project string, args ...string) {
+	t.Helper()
+	cmd := shell.Command{
+		Command: "gcloud",
+		Args:    append([]string{"--project", project}, args...),
+	}
+	err := shell.RunCommandE(t, cmd)
+	require.NoError(t, err)
+}
+
+// runGCLOUDNoOutE executes a gcloud command and returns any error.
+func runGCLOUDNoOutE(t *testing.T, project string, args ...string) error {
+	t.Helper()
+	cmd := shell.Command{
+		Command: "gcloud",
+		Args:    append([]string{"--project", project}, args...),
+	}
+	return shell.RunCommandE(t, cmd)
+}
+
+// --- gcloud assertion helpers ---
+
+// requireGcloudBoolTrue asserts gcloud boolean output is "true".
+func requireGcloudBoolTrue(t *testing.T, s string) {
+	t.Helper()
+	v := strings.ToLower(strings.TrimSpace(s))
+	require.Equal(t, "true", v)
+}
+
+// requireGcloudBoolEquals asserts gcloud boolean output matches expected value.
+// Handles gcloud's quirk of returning empty string for false.
+func requireGcloudBoolEquals(t *testing.T, s string, want bool) {
+	t.Helper()
+	v := strings.ToLower(strings.TrimSpace(s))
+	if want {
+		require.Equal(t, "true", v)
+	} else {
+		// gcloud returns empty string for false boolean values
+		require.True(t, v == "false" || v == "", "expected false or empty, got %q", v)
+	}
+}
+
+// --- OpenTofu wrappers ---
+
+// runTofu executes a tofu command with proper flag ordering.
+func runTofu(t *testing.T, tf *terraform.Options, tfvarsPath string, args ...string) {
+	t.Helper()
+	require.GreaterOrEqual(t, len(args), 1, "tofu subcommand required")
+	sub := args[0]
+	rest := args[1:]
+
+	finalArgs := []string{sub, "-input=false", "-no-color"}
+	// Only pass -var-file for commands that load configuration
+	if sub != "state" && tfvarsPath != "" {
+		finalArgs = append(finalArgs, "-var-file="+tfvarsPath)
+	}
+	finalArgs = append(finalArgs, rest...)
+
+	cmd := shell.Command{
+		Command:    tf.TerraformBinary, // "tofu"
+		Args:       finalArgs,
+		WorkingDir: tf.TerraformDir,
+		Env:        tf.EnvVars,
+	}
+	out, err := shell.RunCommandAndGetStdOutE(t, cmd)
+	require.NoErrorf(t, err, "%s %v failed: %s", tf.TerraformBinary, finalArgs, out)
+}
+
+// runTofuE executes a tofu command and returns any error.
+func runTofuE(t *testing.T, tf *terraform.Options, tfvarsPath string, args ...string) error {
+	t.Helper()
+	require.GreaterOrEqual(t, len(args), 1, "tofu subcommand required")
+	sub := args[0]
+	rest := args[1:]
+
+	finalArgs := []string{sub, "-input=false", "-no-color"}
+	if sub != "state" && tfvarsPath != "" {
+		finalArgs = append(finalArgs, "-var-file="+tfvarsPath)
+	}
+	finalArgs = append(finalArgs, rest...)
+
+	cmd := shell.Command{
+		Command:    tf.TerraformBinary,
+		Args:       finalArgs,
+		WorkingDir: tf.TerraformDir,
+		Env:        tf.EnvVars,
+	}
+	_, err := shell.RunCommandAndGetStdOutE(t, cmd)
+	return err
+}
+
+// runTofuStateRmE removes a resource from tofu state and returns any error.
+// 'tofu state' commands do not need variables; keep a separate helper.
+func runTofuStateRmE(t *testing.T, tf *terraform.Options, addr string) error {
+	t.Helper()
+	cmd := shell.Command{
+		Command:    tf.TerraformBinary,
+		Args:       []string{"state", "rm", addr},
+		WorkingDir: tf.TerraformDir,
+		Env:        tf.EnvVars,
+	}
+	_, err := shell.RunCommandAndGetStdOutE(t, cmd)
+	return err
 }

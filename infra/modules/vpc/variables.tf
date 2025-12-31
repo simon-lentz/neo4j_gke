@@ -100,4 +100,8 @@ variable "nat_source_subnetwork_ip_ranges_to_nat" {
   type        = string
   description = "Which subnet IP ranges to NAT."
   default     = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+  validation {
+    condition     = contains(["ALL_SUBNETWORKS_ALL_IP_RANGES", "ALL_SUBNETWORKS_ALL_PRIMARY_IP_RANGES"], var.nat_source_subnetwork_ip_ranges_to_nat)
+    error_message = "Must be ALL_SUBNETWORKS_ALL_IP_RANGES or ALL_SUBNETWORKS_ALL_PRIMARY_IP_RANGES."
+  }
 }

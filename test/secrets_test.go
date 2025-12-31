@@ -11,6 +11,9 @@ import (
 )
 
 func TestSecrets_CreateDescribeDestroy(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, DefaultTestTimeout)
 
@@ -57,6 +60,9 @@ func TestSecrets_CreateDescribeDestroy(t *testing.T) {
 }
 
 func TestSecrets_WithAccessors(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, DefaultTestTimeout)
 
@@ -116,15 +122,29 @@ func TestSecrets_WithAccessors(t *testing.T) {
 	// Compute SA email from known format
 	saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", saName, projectID)
 
-	// Update secret terraform with the SA email
-	tf.Vars["accessors"] = map[string][]string{
-		secretName: {fmt.Sprintf("serviceAccount:%s", saEmail)},
-	}
+	// Create new secret options with the SA email (avoid mutating original)
+	tfApply := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+		TerraformDir:    secretDir,
+		TerraformBinary: "tofu",
+		Vars: map[string]any{
+			"project_id": projectID,
+			"secrets": map[string]any{
+				secretName: map[string]any{
+					"description": "Secret with accessor",
+				},
+			},
+			"accessors": map[string][]string{
+				secretName: {fmt.Sprintf("serviceAccount:%s", saEmail)},
+			},
+			"enable_secret_manager_api": false,
+		},
+		NoColor: true,
+	})
 
-	terraform.InitAndApply(t, tf)
+	terraform.InitAndApply(t, tfApply)
 
 	// Verify secret was created
-	secretIDs := terraform.OutputMap(t, tf, "secret_ids")
+	secretIDs := terraform.OutputMap(t, tfApply, "secret_ids")
 	require.Contains(t, secretIDs, secretName)
 
 	// Verify IAM binding via gcloud
@@ -134,6 +154,9 @@ func TestSecrets_WithAccessors(t *testing.T) {
 }
 
 func TestSecrets_MultipleSecrets(t *testing.T) {
+	// Sequential execution required: Tests share GCP project resources
+	// and lack isolation mechanisms for safe parallel execution.
+
 	// Validate timeout before creating resources
 	RequireMinimumTimeout(t, DefaultTestTimeout)
 

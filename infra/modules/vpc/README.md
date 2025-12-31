@@ -41,6 +41,9 @@ module "vpc" {
 | pods_range_name | Name for the pods secondary range | `string` | `"pods"` | no |
 | services_range_name | Name for the services secondary range | `string` | `"services"` | no |
 | enable_cloud_nat | Whether to create Cloud NAT | `bool` | `true` | no |
+| enable_flow_logs | Enable VPC flow logs on subnet (incurs costs) | `bool` | `true` | no |
+| nat_ip_allocate_option | NAT IP allocation: AUTO_ONLY or MANUAL_ONLY | `string` | `"AUTO_ONLY"` | no |
+| nat_source_subnetwork_ip_ranges_to_nat | Subnet ranges to NAT | `string` | `"ALL_SUBNETWORKS_ALL_IP_RANGES"` | no |
 | labels | Labels to apply to resources | `map(string)` | `{}` | no |
 
 ## Outputs
@@ -58,3 +61,41 @@ module "vpc" {
 | services_range_name | The name of the secondary IP range for services |
 | router_name | The name of the Cloud Router (if created) |
 | nat_name | The name of the Cloud NAT (if created) |
+| nat_external_ip | The external IP of Cloud NAT (if created) |
+
+## Cost Considerations
+
+### VPC Flow Logs
+
+Flow logs are enabled by default (`enable_flow_logs = true`) for security monitoring and troubleshooting. Cost implications:
+
+- **Logging costs**: ~$0.50/GB ingested to Cloud Logging
+- **Storage costs**: If exported to GCS via log sink, standard storage rates apply
+- **Mitigation**: Subnet configured with 0.5 sampling rate (50% of flows logged)
+
+To disable for cost-sensitive environments:
+
+```hcl
+module "vpc" {
+  # ...
+  enable_flow_logs = false
+}
+```
+
+### Cloud NAT
+
+Cloud NAT is enabled by default for private GKE node egress. Costs include:
+
+- **Hourly charge**: Per NAT gateway per region
+- **Data processing**: Per GB processed through NAT
+
+See [Cloud NAT pricing](https://cloud.google.com/nat/pricing) for current rates.
+
+To disable for environments with public node IPs:
+
+```hcl
+module "vpc" {
+  # ...
+  enable_cloud_nat = false
+}
+```
