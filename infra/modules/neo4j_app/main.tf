@@ -1,8 +1,26 @@
-# Neo4j Application - Test Environment
+# Neo4j Application Module
 #
-# Test variant of the app layer that accepts direct variable inputs
-# instead of reading from terraform_remote_state. This enables
-# integration testing without requiring a state bucket.
+# This module deploys Neo4j to a GKE cluster. It configures:
+# - Kubernetes namespace with labels
+# - Service account with Workload Identity for backups
+# - NetworkPolicies for security
+# - Neo4j Helm release
+
+# Read Neo4j admin password from Secret Manager
+# SECURITY WARNING: This stores the password in Terraform state (encrypted by CMEK).
+# For production, use neo4j_password_k8s_secret variable with externally-managed secret
+# (via Secret Manager CSI driver, External Secrets Operator, or kubectl).
+data "google_secret_manager_secret_version" "neo4j_password" {
+  count   = var.neo4j_password_k8s_secret == null && var.neo4j_password == null && var.neo4j_password_secret_id != null ? 1 : 0
+  project = var.project_id
+  secret  = var.neo4j_password_secret_id
+}
+
+# Determine password source: direct input > Secret Manager > K8s secret
+locals {
+  use_secret_manager = var.neo4j_password == null && var.neo4j_password_k8s_secret == null && var.neo4j_password_secret_id != null
+  effective_password = var.neo4j_password != null ? var.neo4j_password : (local.use_secret_manager ? data.google_secret_manager_secret_version.neo4j_password[0].secret_data : null)
+}
 
 # Kubernetes namespace for Neo4j
 resource "kubernetes_namespace" "neo4j" {
@@ -11,7 +29,7 @@ resource "kubernetes_namespace" "neo4j" {
     labels = {
       "app.kubernetes.io/name"       = "neo4j"
       "app.kubernetes.io/managed-by" = "terraform"
-      "environment"                  = "test"
+      "environment"                  = var.environment
     }
   }
 }
@@ -248,10 +266,22 @@ resource "helm_release" "neo4j" {
   # Use values file for base configuration
   values = [file("${path.module}/values/neo4j.yaml")]
 
-  # Override sensitive values (direct password input for testing)
-  set_sensitive {
-    name  = "neo4j.password"
-    value = var.neo4j_password
+  # Override sensitive values - only when using direct password or Secret Manager
+  dynamic "set_sensitive" {
+    for_each = local.effective_password != null ? [1] : []
+    content {
+      name  = "neo4j.password"
+      value = local.effective_password
+    }
+  }
+
+  # Use existing K8s secret for password (avoids secret in Terraform state)
+  dynamic "set" {
+    for_each = var.neo4j_password_k8s_secret != null ? [1] : []
+    content {
+      name  = "neo4j.passwordFromSecret"
+      value = var.neo4j_password_k8s_secret
+    }
   }
 
   # Override instance name

@@ -18,22 +18,19 @@ This repository provisions a **single-instance Neo4j Enterprise** deployment on 
 ```text
 .
 ├── infra/
-│   ├── envs/              # Platform layer (GCP resources)
-│   │   └── dev/           # Dev: VPC, GKE, IAM, secrets, buckets
-│   │
-│   ├── apps/              # Application layer (K8s deployments)
-│   │   └── neo4j/         # Neo4j Helm deployment
-│   │       └── dev/
+│   ├── envs/              # Environment configurations
+│   │   ├── bootstrap/     # One-time: creates GCS state bucket + CMEK
+│   │   └── dev/           # Dev: VPC, GKE, IAM, secrets, buckets + Neo4j
 │   │
 │   └── modules/           # Reusable OpenTofu modules
-│       ├── bootstrap/     # One-time: creates GCS state bucket + CMEK
 │       ├── vpc/
 │       ├── gke/
 │       ├── secrets/
 │       ├── backup_bucket/
 │       ├── audit_logging/
 │       ├── service_accounts/
-│       └── wif/
+│       ├── wif/
+│       └── neo4j_app/     # Neo4j K8s resources + Helm chart
 │
 └── test/                  # Go integration tests (Terratest)
 ```
@@ -44,10 +41,10 @@ The infrastructure uses a **two-layer model**:
 
 | Layer | Directory | Purpose | State Prefix |
 | ----- | --------- | ------- | ------------ |
-| **Platform** | `infra/envs/dev/` | GCP primitives (VPC, GKE, IAM, GCS) | `dev` |
-| **Apps** | `infra/apps/neo4j/dev/` | K8s resources + Helm releases | `apps/neo4j/dev` |
+| **Bootstrap** | `infra/envs/bootstrap/` | State bucket + CMEK (one-time) | `bootstrap` |
+| **Dev** | `infra/envs/dev/` | GCP + K8s resources (VPC, GKE, IAM, GCS, Neo4j) | `dev` |
 
-The apps layer reads platform outputs via `terraform_remote_state`, keeping ownership boundaries clear.
+A single `tofu apply` in the dev environment deploys both platform infrastructure and the Neo4j application.
 
 ## Quick Start
 
@@ -109,7 +106,18 @@ tofu init \
 
 See the bootstrap [README](./infra/envs/bootstrap/README.md) for additional options and configuration.
 
-### 2. Deploy Platform
+### 2. Set Neo4j Password
+
+Create the password secret before deploying (the secret is created but needs a version):
+
+```bash
+echo -n "your-secure-password" | \
+  gcloud secrets versions add neo4j-admin-password-dev --data-file=-
+```
+
+### 3. Deploy Dev Environment
+
+This single command deploys all infrastructure including Neo4j:
 
 ```bash
 cd infra/envs/dev
@@ -119,24 +127,7 @@ tofu apply \
   -var="state_bucket=YOUR_STATE_BUCKET"
 ```
 
-### 3. Set Neo4j Password
-
-```bash
-echo -n "your-secure-password" | \
-  gcloud secrets versions add neo4j-admin-password-dev --data-file=-
-```
-
-### 4. Deploy Neo4j
-
-```bash
-cd infra/apps/neo4j/dev
-tofu init -backend-config="bucket=YOUR_STATE_BUCKET"
-tofu apply \
-  -var="project_id=YOUR_PROJECT" \
-  -var="state_bucket=YOUR_STATE_BUCKET"
-```
-
-### 5. Connect
+### 4. Connect
 
 ```bash
 # Port-forward for Bolt protocol (programmatic access)
@@ -172,12 +163,7 @@ open http://localhost:7474/browser
 | [audit_logging](infra/modules/audit_logging/README.md) | KMS/GCS audit logging |
 | [service_accounts](infra/modules/service_accounts/README.md) | GCP service accounts |
 | [wif](infra/modules/wif/README.md) | Workload Identity Federation |
-
-### Application Documentation
-
-| App | Description |
-| --- | ----------- |
-| [neo4j](infra/apps/neo4j/README.md) | Neo4j Helm deployment |
+| [neo4j_app](infra/modules/neo4j_app/README.md) | Neo4j K8s resources + Helm chart |
 
 ## Testing
 

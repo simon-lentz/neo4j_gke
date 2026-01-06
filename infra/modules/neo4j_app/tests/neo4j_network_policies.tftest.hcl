@@ -11,9 +11,6 @@ mock_provider "google" {}
 
 variables {
   project_id             = "test-project"
-  region                 = "us-central1"
-  cluster_name           = "test-cluster"
-  cluster_location       = "us-central1"
   workload_identity_pool = "test-project.svc.id.goog"
   backup_gsa_email       = "backup@test-project.iam.gserviceaccount.com"
   backup_gsa_name        = "projects/test-project/serviceAccounts/backup@test-project.iam.gserviceaccount.com"

@@ -39,3 +39,50 @@ variable "state_bucket" {
   type        = string
   description = "GCS bucket for OpenTofu state. Used to read bootstrap outputs for CMEK key."
 }
+
+# Neo4j Configuration
+variable "neo4j_chart_version" {
+  type        = string
+  description = "Version of the Neo4j Helm chart to deploy."
+  default     = "5.26.0"
+}
+
+variable "neo4j_namespace" {
+  type        = string
+  description = "Kubernetes namespace for Neo4j deployment."
+  default     = "neo4j"
+}
+
+variable "neo4j_instance_name" {
+  type        = string
+  description = "Name for the Neo4j instance."
+  default     = "neo4j-dev"
+}
+
+variable "neo4j_storage_size" {
+  type        = string
+  description = "Storage size for Neo4j data volume."
+  default     = "10Gi"
+}
+
+variable "enable_neo4j_browser" {
+  type        = bool
+  description = "Enable HTTP for Neo4j Browser access (port 7474)."
+  default     = true
+}
+
+variable "allowed_ingress_namespaces" {
+  type        = list(string)
+  description = "Additional namespaces allowed to access Neo4j."
+  default     = []
+}
+
+variable "neo4j_password_k8s_secret" {
+  type        = string
+  description = <<-EOT
+    Name of an existing Kubernetes Secret containing the Neo4j password.
+    If set, the password will NOT be fetched from Secret Manager into Terraform state.
+    For production, create the K8s secret externally and provide its name here.
+  EOT
+  default     = null
+}

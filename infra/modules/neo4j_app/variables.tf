@@ -1,3 +1,9 @@
+# Neo4j App Module Variables
+#
+# This module accepts direct inputs from the calling environment (no terraform_remote_state).
+# All platform layer values are passed as variables.
+
+# Platform layer inputs
 variable "project_id" {
   type        = string
   description = "GCP project ID."
@@ -7,25 +13,41 @@ variable "project_id" {
   }
 }
 
-variable "region" {
+variable "workload_identity_pool" {
   type        = string
-  description = "GCP region."
-  default     = "us-central1"
+  description = "Workload Identity pool (format: PROJECT_ID.svc.id.goog)."
 }
 
-variable "state_bucket" {
+variable "backup_gsa_email" {
   type        = string
-  description = "GCS bucket containing platform Terraform state."
+  description = "Email of the GCP service account for backups."
 }
 
+variable "backup_gsa_name" {
+  type        = string
+  description = "Full resource name of the backup service account."
+}
+
+variable "backup_bucket_url" {
+  type        = string
+  description = "GCS bucket URL for Neo4j backups."
+}
+
+variable "neo4j_password_secret_id" {
+  type        = string
+  description = "Secret Manager secret ID for Neo4j password. Used when neo4j_password_k8s_secret is null."
+  default     = null
+}
+
+# Neo4j configuration
 variable "environment" {
   type        = string
   description = "Environment name (e.g., dev, staging, prod)."
   default     = "dev"
 
   validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "environment must be one of: dev, staging, prod."
+    condition     = contains(["dev", "staging", "prod", "test"], var.environment)
+    error_message = "environment must be one of: dev, staging, prod, test."
   }
 }
 
@@ -91,4 +113,12 @@ variable "backup_pod_label" {
   type        = string
   description = "Label value to identify backup pods for network policy. Pods with 'app.kubernetes.io/name' matching this value get backup network access."
   default     = "neo4j-backup"
+}
+
+# Direct password input for testing (bypasses Secret Manager)
+variable "neo4j_password" {
+  type        = string
+  description = "Neo4j admin password (direct input). If set, takes precedence over Secret Manager lookup."
+  sensitive   = true
+  default     = null
 }

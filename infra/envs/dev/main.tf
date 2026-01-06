@@ -130,3 +130,27 @@ module "secrets" {
 
   # No accessors defined here - will be granted via Workload Identity in apps layer
 }
+
+# Neo4j Application Deployment
+module "neo4j" {
+  source = "../../modules/neo4j_app"
+
+  # Platform inputs
+  project_id               = var.project_id
+  workload_identity_pool   = module.gke.workload_identity_pool
+  backup_gsa_email         = module.backup_sa.service_accounts["neo4j-backup"].email
+  backup_gsa_name          = module.backup_sa.service_accounts["neo4j-backup"].name
+  backup_bucket_url        = module.backup_bucket.bucket_url
+  neo4j_password_secret_id = module.secrets.secret_ids["neo4j-admin-password-dev"]
+
+  # Neo4j configuration
+  neo4j_chart_version        = var.neo4j_chart_version
+  neo4j_namespace            = var.neo4j_namespace
+  neo4j_instance_name        = var.neo4j_instance_name
+  neo4j_storage_size         = var.neo4j_storage_size
+  enable_neo4j_browser       = var.enable_neo4j_browser
+  allowed_ingress_namespaces = var.allowed_ingress_namespaces
+  neo4j_password_k8s_secret  = var.neo4j_password_k8s_secret
+
+  depends_on = [module.gke, module.backup_sa, module.backup_bucket, module.secrets]
+}

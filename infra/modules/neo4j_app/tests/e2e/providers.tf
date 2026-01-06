@@ -1,4 +1,6 @@
-# Google provider for GCP resources
+# E2E Test Providers
+# Configures providers with direct variable inputs for test isolation
+
 provider "google" {
   project = var.project_id
   region  = var.region
@@ -7,10 +9,10 @@ provider "google" {
 # Get current GCP client config for authentication
 data "google_client_config" "default" {}
 
-# Fetch GKE cluster information from platform layer
+# Fetch GKE cluster information using direct variables
 data "google_container_cluster" "this" {
-  name     = data.terraform_remote_state.platform.outputs.cluster_name
-  location = data.terraform_remote_state.platform.outputs.cluster_location
+  name     = var.cluster_name
+  location = var.cluster_location
   project  = var.project_id
 }
 

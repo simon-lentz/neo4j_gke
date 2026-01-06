@@ -77,20 +77,6 @@ jobs:
             (cd "$dir" && tofu validate)
             echo "::endgroup::"
           done
-      - name: Validate app roots (tofu validate)
-        run: |
-          set -euo pipefail
-          # Find all app directories containing main.tf
-          find infra/apps -name main.tf -type f | while read -r mainfile; do
-            dir=$(dirname "$mainfile")
-            echo "::group::validate: $dir"
-            if ! (cd "$dir" && tofu init -backend=false >/dev/null 2>&1); then
-              echo "::error::tofu init failed in $dir"
-              exit 1
-            fi
-            (cd "$dir" && tofu validate)
-            echo "::endgroup::"
-          done
       - name: Run OpenTofu tests (tofu test)
         run: |
           set -euo pipefail

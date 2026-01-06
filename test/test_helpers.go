@@ -177,18 +177,6 @@ func CopyEnvToTemp(t *testing.T, envPath string) string {
 	)
 }
 
-// CopyAppModuleToTemp copies an app layer module to a temp directory for testing.
-// The appPath should be relative to infra/apps/ (e.g., "neo4j/test").
-func CopyAppModuleToTemp(t *testing.T, appPath string) string {
-	t.Helper()
-
-	return testStructure.CopyTerraformFolderToTemp(
-		t,
-		RepoRoot(t),
-		filepath.Join("infra", "apps", appPath),
-	)
-}
-
 // GetTestRegion returns the GCP region for tests, defaulting to us-central1.
 // Override via NEO4J_GKE_TEST_REGION environment variable.
 func GetTestRegion(t *testing.T) string {

@@ -63,3 +63,24 @@ output "neo4j_password_secret_id" {
   description = "Secret ID for Neo4j admin password."
   value       = module.secrets.secret_ids["neo4j-admin-password-dev"]
 }
+
+# Neo4j Outputs
+output "neo4j_namespace" {
+  description = "Kubernetes namespace where Neo4j is deployed."
+  value       = module.neo4j.namespace
+}
+
+output "neo4j_instance_name" {
+  description = "Name of the Neo4j instance."
+  value       = module.neo4j.neo4j_instance_name
+}
+
+output "neo4j_bolt_service" {
+  description = "Kubernetes service name for Bolt protocol access."
+  value       = module.neo4j.neo4j_bolt_service
+}
+
+output "neo4j_connection_info" {
+  description = "Neo4j connection information."
+  value       = module.neo4j.connection_info
+}

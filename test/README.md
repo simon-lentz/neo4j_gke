@@ -78,7 +78,6 @@ Key functions in `test_helpers.go`:
 | `RepoRoot(t)` | Find repository root by walking to `.git` |
 | `CopyModuleToTemp(t, module)` | Copy module to temp directory for isolation |
 | `CopyEnvToTemp(t, envPath)` | Copy environment config to temp directory |
-| `CopyAppModuleToTemp(t, appPath)` | Copy app layer module to temp directory |
 | `DeferredTerraformCleanup(t, tf)` | Register cleanup via `t.Cleanup()` |
 | `DeferredTerraformCleanupMultiple(t, ...)` | Register multiple cleanups in LIFO order |
 | `RequireMinimumTimeout(t, duration)` | Validate test has sufficient timeout |

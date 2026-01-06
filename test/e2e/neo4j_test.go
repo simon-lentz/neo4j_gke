@@ -213,9 +213,9 @@ func TestNeo4j_FullDeployment(t *testing.T) {
 	t.Logf("Backup bucket created: %s", backupBucketName)
 
 	// -------------------------------------------------------------------------
-	// Step 5: Deploy Neo4j via App Layer Terraform
+	// Step 5: Deploy Neo4j via neo4j_app module
 	// -------------------------------------------------------------------------
-	t.Log("Step 5: Deploying Neo4j via app layer Terraform...")
+	t.Log("Step 5: Deploying Neo4j via neo4j_app module...")
 
 	// Get service account resource name for WIF binding
 	backupGSAEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", backupSAName, projectID)
@@ -224,7 +224,7 @@ func TestNeo4j_FullDeployment(t *testing.T) {
 	neo4jInstanceName := fmt.Sprintf("neo4j-%s", suffix)
 	testPassword := fmt.Sprintf("test-pwd-%s", random.UniqueId())
 
-	appDir := testhelpers.CopyAppModuleToTemp(t, "neo4j/test")
+	appDir := testhelpers.CopyModuleToTemp(t, "neo4j_app/tests/e2e")
 
 	appTf := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir:    appDir,
