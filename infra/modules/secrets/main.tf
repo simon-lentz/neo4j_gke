@@ -27,6 +27,11 @@ resource "google_secret_manager_secret" "secrets" {
 
   labels = each.value.labels
 
+  # Map description to annotations (google_secret_manager_secret has no description attribute)
+  annotations = {
+    description = each.value.description
+  }
+
   dynamic "replication" {
     for_each = each.value.replication == "automatic" ? [1] : []
     content {
@@ -54,6 +59,13 @@ resource "google_secret_manager_secret" "secrets" {
 
   # Version aliases (map attribute, not a block)
   version_aliases = each.value.version_aliases
+
+  lifecycle {
+    precondition {
+      condition     = each.value.replication != "user_managed" || length(var.replication_locations) > 0
+      error_message = "replication_locations must be non-empty when replication is 'user_managed' for secret '${each.key}'."
+    }
+  }
 
   depends_on = [google_project_service.secretmanager]
 }

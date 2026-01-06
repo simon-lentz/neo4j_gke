@@ -26,6 +26,40 @@ module "gke" {
 - **Release Channels**: RAPID, REGULAR, or STABLE update tracks
 - **Maintenance Windows**: Configurable maintenance schedules
 
+## Control Plane Access
+
+By default, this module creates a cluster with:
+
+- **Private nodes**: Worker nodes have no public IPs (egress via Cloud NAT)
+- **Public control plane**: The Kubernetes API endpoint is publicly accessible
+
+This default is intentional for dev/POC convenience, allowing `kubectl` access without VPN or bastion setup.
+
+### Production Hardening
+
+For production deployments, restrict control plane access using one of these approaches:
+
+**Option 1: Fully private endpoint** (requires VPN/bastion for kubectl access)
+
+```hcl
+module "gke" {
+  # ...
+  enable_private_endpoint = true
+}
+```
+
+**Option 2: Restrict to specific networks** (allows public access from trusted IPs only)
+
+```hcl
+module "gke" {
+  # ...
+  master_authorized_networks = [
+    { cidr_block = "203.0.113.0/24", display_name = "Office network" },
+    { cidr_block = "198.51.100.5/32", display_name = "CI/CD runner" },
+  ]
+}
+```
+
 ## Workload Identity
 
 The cluster automatically enables Workload Identity. To bind a Kubernetes service account to a GCP service account:
@@ -47,14 +81,14 @@ resource "google_service_account_iam_member" "wi_binding" {
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | terraform | >= 1.9.1 |
 | google | ~> 6.3 |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | -------- |
 | project_id | GCP project for the cluster | `string` | n/a | yes |
 | region | GCP region for the cluster | `string` | n/a | yes |
 | cluster_name | Name of the GKE cluster | `string` | `"neo4j-cluster"` | no |
@@ -76,7 +110,7 @@ resource "google_service_account_iam_member" "wi_binding" {
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | cluster_id | Unique identifier of the cluster |
 | cluster_name | Name of the cluster |
 | cluster_location | Region of the cluster |

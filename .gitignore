@@ -1,6 +1,7 @@
 # LLMs
 .claude
 CLAUDE.md
+AGENTS.md
 # Ignore generated credentials from google-github-actions/auth
 gha-creds-*.json
 

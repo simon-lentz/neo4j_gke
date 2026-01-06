@@ -137,6 +137,106 @@ resource "kubernetes_network_policy" "allow_neo4j" {
   }
 }
 
+# Allow backup pods to access Neo4j backup port and external services
+resource "kubernetes_network_policy" "allow_backup" {
+  metadata {
+    name      = "allow-backup"
+    namespace = kubernetes_namespace.neo4j.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = var.backup_pod_label
+      }
+    }
+
+    # Allow ingress from Neo4j pods on backup port 6362
+    ingress {
+      ports {
+        port     = "6362"
+        protocol = "TCP"
+      }
+      from {
+        pod_selector {
+          match_labels = {
+            "app.kubernetes.io/name" = "neo4j"
+          }
+        }
+      }
+    }
+
+    # Allow egress for backup operations
+    egress {
+      # DNS resolution
+      ports {
+        port     = "53"
+        protocol = "UDP"
+      }
+      ports {
+        port     = "53"
+        protocol = "TCP"
+      }
+    }
+
+    egress {
+      # Metadata server for GKE Workload Identity token exchange
+      ports {
+        port     = "80"
+        protocol = "TCP"
+      }
+      to {
+        ip_block {
+          cidr = "169.254.169.254/32"
+        }
+      }
+    }
+
+    egress {
+      # HTTPS for GCS backup uploads
+      ports {
+        port     = "443"
+        protocol = "TCP"
+      }
+    }
+
+    policy_types = ["Ingress", "Egress"]
+  }
+}
+
+# Allow Neo4j pods to connect to backup pods on port 6362
+resource "kubernetes_network_policy" "neo4j_to_backup" {
+  metadata {
+    name      = "neo4j-to-backup-egress"
+    namespace = kubernetes_namespace.neo4j.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "neo4j"
+      }
+    }
+
+    # Allow egress to backup pods on port 6362
+    egress {
+      ports {
+        port     = "6362"
+        protocol = "TCP"
+      }
+      to {
+        pod_selector {
+          match_labels = {
+            "app.kubernetes.io/name" = var.backup_pod_label
+          }
+        }
+      }
+    }
+
+    policy_types = ["Egress"]
+  }
+}
+
 # Neo4j Helm release
 resource "helm_release" "neo4j" {
   name       = var.neo4j_instance_name

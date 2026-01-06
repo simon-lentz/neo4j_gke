@@ -43,8 +43,8 @@ module "vpc" {
 | enable_cloud_nat | Whether to create Cloud NAT | `bool` | `true` | no |
 | enable_flow_logs | Enable VPC flow logs on subnet (incurs costs) | `bool` | `true` | no |
 | nat_ip_allocate_option | NAT IP allocation: AUTO_ONLY or MANUAL_ONLY | `string` | `"AUTO_ONLY"` | no |
+| nat_ips | List of reserved IP self_links for NAT (required if MANUAL_ONLY) | `list(string)` | `[]` | no |
 | nat_source_subnetwork_ip_ranges_to_nat | Subnet ranges to NAT | `string` | `"ALL_SUBNETWORKS_ALL_IP_RANGES"` | no |
-| labels | Labels to apply to resources | `map(string)` | `{}` | no |
 
 ## Outputs
 
@@ -61,7 +61,6 @@ module "vpc" {
 | services_range_name | The name of the secondary IP range for services |
 | router_name | The name of the Cloud Router (if created) |
 | nat_name | The name of the Cloud NAT (if created) |
-| nat_external_ip | The external IP of Cloud NAT (if created) |
 
 ## Cost Considerations
 

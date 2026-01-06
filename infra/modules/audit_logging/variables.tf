@@ -19,18 +19,6 @@ variable "logs_bucket_name" {
   default     = null
 }
 
-variable "state_bucket_name" {
-  type        = string
-  description = "Name of state bucket to enable access logging on. If null, GCS access logging is skipped."
-  default     = null
-}
-
-variable "enable_gcs_access_logging" {
-  type        = bool
-  description = "Enable GCS access logging on state bucket."
-  default     = true
-}
-
 variable "enable_kms_audit_logs" {
   type        = bool
   description = "Enable Cloud Audit Logs for Cloud KMS DATA_READ and DATA_WRITE."
@@ -41,6 +29,18 @@ variable "enable_gcs_audit_logs" {
   type        = bool
   description = "Enable Cloud Audit Logs for Cloud Storage DATA_READ and DATA_WRITE."
   default     = true
+}
+
+variable "enable_container_audit_logs" {
+  type        = bool
+  description = "Enable Cloud Audit Logs for GKE Container API DATA_READ and DATA_WRITE."
+  default     = false
+}
+
+variable "audit_log_exempted_members" {
+  type        = list(string)
+  description = "List of identities exempt from audit logging (e.g., serviceAccount:...). Applied to all enabled audit configs. Note: google_project_iam_audit_config is authoritative per service and will overwrite existing audit settings for that service."
+  default     = []
 }
 
 variable "enable_log_sink" {

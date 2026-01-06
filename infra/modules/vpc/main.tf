@@ -57,10 +57,18 @@ resource "google_compute_router_nat" "nat" {
   region                             = var.region
   router                             = google_compute_router.router[0].name
   nat_ip_allocate_option             = var.nat_ip_allocate_option
+  nat_ips                            = var.nat_ip_allocate_option == "MANUAL_ONLY" ? var.nat_ips : null
   source_subnetwork_ip_ranges_to_nat = var.nat_source_subnetwork_ip_ranges_to_nat
 
   log_config {
     enable = true
     filter = "ERRORS_ONLY"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.nat_ip_allocate_option != "MANUAL_ONLY" || length(var.nat_ips) > 0
+      error_message = "nat_ips must be provided when nat_ip_allocate_option is MANUAL_ONLY."
+    }
   }
 }

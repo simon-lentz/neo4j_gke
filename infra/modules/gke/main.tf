@@ -1,3 +1,11 @@
+# Security check: warn if public control plane is exposed without IP restrictions
+check "public_endpoint_exposure" {
+  assert {
+    condition     = var.enable_private_endpoint || length(var.master_authorized_networks) > 0
+    error_message = "SECURITY WARNING: Control plane is publicly accessible without IP restrictions. For production, set enable_private_endpoint=true or configure master_authorized_networks. See module README for hardening options."
+  }
+}
+
 # Enable Container API
 resource "google_project_service" "container" {
   count              = var.enable_container_api ? 1 : 0

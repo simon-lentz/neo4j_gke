@@ -51,14 +51,58 @@ jobs:
           cache-key-prefix: tofu
       - name: Enforce OpenTofu formatting (tofu fmt)
         run: tofu fmt -recursive -check infra/
-      - name: Validate all Terraform modules (tofu validate)
+      - name: Validate Terraform modules (tofu validate)
         run: |
           set -euo pipefail
           for dir in infra/modules/*; do
             [[ -d "$dir" ]] || continue
             echo "::group::validate: $dir"
-            (cd "$dir" && tofu init -backend=false >/dev/null 2>&1 || true)
+            if ! (cd "$dir" && tofu init -backend=false >/dev/null 2>&1); then
+              echo "::error::tofu init failed in $dir"
+              exit 1
+            fi
             (cd "$dir" && tofu validate)
+            echo "::endgroup::"
+          done
+      - name: Validate environment roots (tofu validate)
+        run: |
+          set -euo pipefail
+          for dir in infra/envs/*; do
+            [[ -d "$dir" ]] || continue
+            echo "::group::validate: $dir"
+            if ! (cd "$dir" && tofu init -backend=false >/dev/null 2>&1); then
+              echo "::error::tofu init failed in $dir"
+              exit 1
+            fi
+            (cd "$dir" && tofu validate)
+            echo "::endgroup::"
+          done
+      - name: Validate app roots (tofu validate)
+        run: |
+          set -euo pipefail
+          # Find all app directories containing main.tf
+          find infra/apps -name main.tf -type f | while read -r mainfile; do
+            dir=$(dirname "$mainfile")
+            echo "::group::validate: $dir"
+            if ! (cd "$dir" && tofu init -backend=false >/dev/null 2>&1); then
+              echo "::error::tofu init failed in $dir"
+              exit 1
+            fi
+            (cd "$dir" && tofu validate)
+            echo "::endgroup::"
+          done
+      - name: Run OpenTofu tests (tofu test)
+        run: |
+          set -euo pipefail
+          # Run tests for any directory containing .tftest.hcl files
+          find infra -name '*.tftest.hcl' -type f | while read -r testfile; do
+            dir=$(dirname "$testfile")
+            echo "::group::test: $dir"
+            if ! (cd "$dir" && tofu init -backend=false >/dev/null 2>&1); then
+              echo "::error::tofu init failed in $dir"
+              exit 1
+            fi
+            (cd "$dir" && tofu test)
             echo "::endgroup::"
           done
   tflint:

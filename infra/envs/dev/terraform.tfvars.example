@@ -1,5 +1,6 @@
 # Required variables for dev environment
-project_id = "your-gcp-project-id"
+project_id   = "your-gcp-project-id"
+state_bucket = "your-state-bucket-name"  # Created by bootstrap
 
 # Optional overrides
 # region            = "us-central1"

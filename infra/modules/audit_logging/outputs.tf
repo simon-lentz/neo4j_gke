@@ -1,5 +1,5 @@
 output "logs_bucket_name" {
-  description = "Name of the audit logs bucket."
+  description = "Name of the audit logs bucket. Can be used as access_logs_bucket for other buckets."
   value       = google_storage_bucket.logs.name
 }
 
@@ -23,17 +23,17 @@ output "gcs_audit_logs_enabled" {
   value       = var.enable_gcs_audit_logs
 }
 
+output "container_audit_logs_enabled" {
+  description = "Whether GKE Container API audit logs are enabled."
+  value       = var.enable_container_audit_logs
+}
+
 output "log_sink_name" {
-  description = "Name of the Cloud Logging sink (empty if disabled)."
-  value       = var.enable_log_sink ? google_logging_project_sink.audit_sink[0].name : ""
+  description = "Name of the Cloud Logging sink (empty if disabled or no services enabled)."
+  value       = var.enable_log_sink && length(local.sink_filter_services) > 0 ? google_logging_project_sink.audit_sink[0].name : ""
 }
 
 output "log_sink_writer_identity" {
-  description = "Service account identity used by the sink."
-  value       = var.enable_log_sink ? google_logging_project_sink.audit_sink[0].writer_identity : ""
-}
-
-output "access_logs_bucket_name" {
-  description = "Name of the access logs bucket (empty if disabled)."
-  value       = var.enable_gcs_access_logging && var.state_bucket_name != null ? google_storage_bucket.target_access_logs[0].name : ""
+  description = "Service account identity used by the sink (empty if disabled or no services enabled)."
+  value       = var.enable_log_sink && length(local.sink_filter_services) > 0 ? google_logging_project_sink.audit_sink[0].writer_identity : ""
 }

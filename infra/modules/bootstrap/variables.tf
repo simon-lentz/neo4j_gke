@@ -157,6 +157,13 @@ variable "additional_project_services" {
 # Backend prefix (directory for state objects)
 variable "backend_prefix" {
   type        = string
-  description = "GCS backend prefix for state objects."
-  default     = "tofu/state"
+  description = "GCS backend prefix for state objects. Downstream layers (e.g., dev) read bootstrap state from this prefix."
+  default     = "bootstrap"
+}
+
+# Access logging for the state bucket
+variable "access_logs_bucket" {
+  type        = string
+  description = "Name of bucket to receive access logs for the state bucket. If null, access logging is disabled."
+  default     = null
 }

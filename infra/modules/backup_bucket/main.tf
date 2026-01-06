@@ -30,9 +30,9 @@ resource "google_storage_bucket" "backups" {
     }
   }
 
-  # Delete old versions
+  # Delete old versions (num_newer_versions = 0 means delete all archived versions immediately)
   dynamic "lifecycle_rule" {
-    for_each = var.enable_versioning && var.backup_versions_to_keep > 0 ? [1] : []
+    for_each = var.enable_versioning ? [1] : []
     content {
       condition {
         num_newer_versions = var.backup_versions_to_keep

@@ -94,3 +94,9 @@ variable "neo4j_helm_repository" {
   description = "Helm repository URL for Neo4j chart."
   default     = "https://helm.neo4j.com/neo4j"
 }
+
+variable "backup_pod_label" {
+  type        = string
+  description = "Label value to identify backup pods for network policy. Pods with 'app.kubernetes.io/name' matching this value get backup network access."
+  default     = "neo4j-backup"
+}

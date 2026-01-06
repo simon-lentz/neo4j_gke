@@ -62,9 +62,17 @@ resource "google_storage_bucket" "state_bucket" {
   }
 
   dynamic "soft_delete_policy" {
-    for_each = var.soft_delete_retention_seconds == null ? [] : [1]
+    # Treat both null and 0 as "disable soft delete"
+    for_each = var.soft_delete_retention_seconds == null || var.soft_delete_retention_seconds == 0 ? [] : [1]
     content {
       retention_duration_seconds = var.soft_delete_retention_seconds
+    }
+  }
+
+  dynamic "logging" {
+    for_each = var.access_logs_bucket != null ? [1] : []
+    content {
+      log_bucket = var.access_logs_bucket
     }
   }
 

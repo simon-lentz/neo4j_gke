@@ -57,3 +57,24 @@ output "network_policy_allow_neo4j" {
   description = "Name of the allow-neo4j NetworkPolicy."
   value       = kubernetes_network_policy.allow_neo4j.metadata[0].name
 }
+
+output "network_policy_allow_backup" {
+  description = "Name of the allow-backup NetworkPolicy."
+  value       = kubernetes_network_policy.allow_backup.metadata[0].name
+}
+
+output "network_policy_neo4j_to_backup" {
+  description = "Name of the neo4j-to-backup NetworkPolicy."
+  value       = kubernetes_network_policy.neo4j_to_backup.metadata[0].name
+}
+
+# Backup NetworkPolicy port verification outputs
+output "backup_policy_ingress_port" {
+  description = "Backup port allowed for ingress (6362)."
+  value       = kubernetes_network_policy.allow_backup.spec[0].ingress[0].ports[0].port
+}
+
+output "backup_pod_label" {
+  description = "Label used to identify backup pods."
+  value       = var.backup_pod_label
+}

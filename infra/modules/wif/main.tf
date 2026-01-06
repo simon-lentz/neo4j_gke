@@ -21,11 +21,13 @@ resource "google_iam_workload_identity_pool" "pool_unprotected" {
 locals {
   _pool = var.prevent_destroy_pool ? google_iam_workload_identity_pool.pool_protected[0] : google_iam_workload_identity_pool.pool_unprotected[0]
 
-  # Avoid coalesce() error when both are empty. Let resource preconditions fire instead.
-  effective_attribute_condition = trimspace(join("", compact([
-    var.attribute_condition_override,
-    local.computed_attribute_condition,
-  ])))
+  # Override replaces computed condition entirely (not concatenated).
+  # If neither is set, preconditions on the provider resources will fire.
+  effective_attribute_condition = (
+    var.attribute_condition_override != null
+    ? var.attribute_condition_override
+    : local.computed_attribute_condition
+  )
 }
 
 

@@ -58,7 +58,15 @@ variable "master_ipv4_cidr" {
 
 variable "enable_private_endpoint" {
   type        = bool
-  description = "Whether the master's internal IP address is used as the cluster endpoint. Set to true for production to prevent public API access. Defaults to false for dev/POC access convenience."
+  description = <<-EOT
+    Whether the master's internal IP address is used as the cluster endpoint.
+
+    SECURITY: When false (default), the Kubernetes API is publicly accessible.
+    For production, either set this to true (requires VPN/bastion for kubectl)
+    or configure master_authorized_networks to restrict access by IP.
+
+    Defaults to false for dev/POC access convenience.
+  EOT
   default     = false
 }
 

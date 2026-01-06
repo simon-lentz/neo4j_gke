@@ -88,11 +88,21 @@ variable "enable_flow_logs" {
 
 variable "nat_ip_allocate_option" {
   type        = string
-  description = "How NAT IPs are allocated: AUTO_ONLY or MANUAL_ONLY."
+  description = "How NAT IPs are allocated: AUTO_ONLY or MANUAL_ONLY. If MANUAL_ONLY, nat_ips must be provided."
   default     = "AUTO_ONLY"
   validation {
     condition     = contains(["AUTO_ONLY", "MANUAL_ONLY"], var.nat_ip_allocate_option)
     error_message = "nat_ip_allocate_option must be AUTO_ONLY or MANUAL_ONLY."
+  }
+}
+
+variable "nat_ips" {
+  type        = list(string)
+  description = "List of self_links of reserved external IPs for Cloud NAT. Required when nat_ip_allocate_option is MANUAL_ONLY."
+  default     = []
+  validation {
+    condition     = alltrue([for ip in var.nat_ips : can(regex("^https://www.googleapis.com/compute/", ip)) || can(regex("^projects/", ip))])
+    error_message = "nat_ips must be a list of compute address self_links or resource references."
   }
 }
 

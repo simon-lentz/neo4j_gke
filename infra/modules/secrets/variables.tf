@@ -35,6 +35,13 @@ EOT
     ])
     error_message = "replication must be 'automatic' or 'user_managed'."
   }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.secrets : !(v.expire_time != null && v.ttl != null)
+    ])
+    error_message = "expire_time and ttl are mutually exclusive. Set only one per secret."
+  }
 }
 
 variable "accessors" {
@@ -55,7 +62,7 @@ EOT
 }
 
 variable "replication_locations" {
-  description = "List of locations for user_managed replication. Only used when replication='user_managed'."
+  description = "List of locations for user_managed replication. Required to be non-empty when any secret uses replication='user_managed'."
   type        = list(string)
   default     = ["us-central1", "us-east1"]
 }

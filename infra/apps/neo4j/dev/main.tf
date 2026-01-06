@@ -17,7 +17,11 @@ data "terraform_remote_state" "platform" {
 }
 
 # Read Neo4j admin password from Secret Manager
+# SECURITY WARNING: This stores the password in Terraform state (encrypted by CMEK).
+# For production, use neo4j_password_k8s_secret variable with externally-managed secret
+# (via Secret Manager CSI driver, External Secrets Operator, or kubectl).
 data "google_secret_manager_secret_version" "neo4j_password" {
+  count   = var.neo4j_password_k8s_secret == null ? 1 : 0
   project = var.project_id
   secret  = data.terraform_remote_state.platform.outputs.neo4j_password_secret_id
 }
@@ -155,6 +159,106 @@ resource "kubernetes_network_policy" "allow_neo4j" {
   }
 }
 
+# Allow backup pods to access Neo4j backup port and external services
+resource "kubernetes_network_policy" "allow_backup" {
+  metadata {
+    name      = "allow-backup"
+    namespace = kubernetes_namespace.neo4j.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = var.backup_pod_label
+      }
+    }
+
+    # Allow ingress from Neo4j pods on backup port 6362
+    ingress {
+      ports {
+        port     = "6362"
+        protocol = "TCP"
+      }
+      from {
+        pod_selector {
+          match_labels = {
+            "app.kubernetes.io/name" = "neo4j"
+          }
+        }
+      }
+    }
+
+    # Allow egress for backup operations
+    egress {
+      # DNS resolution
+      ports {
+        port     = "53"
+        protocol = "UDP"
+      }
+      ports {
+        port     = "53"
+        protocol = "TCP"
+      }
+    }
+
+    egress {
+      # Metadata server for GKE Workload Identity token exchange
+      ports {
+        port     = "80"
+        protocol = "TCP"
+      }
+      to {
+        ip_block {
+          cidr = "169.254.169.254/32"
+        }
+      }
+    }
+
+    egress {
+      # HTTPS for GCS backup uploads
+      ports {
+        port     = "443"
+        protocol = "TCP"
+      }
+    }
+
+    policy_types = ["Ingress", "Egress"]
+  }
+}
+
+# Allow Neo4j pods to connect to backup pods on port 6362
+resource "kubernetes_network_policy" "neo4j_to_backup" {
+  metadata {
+    name      = "neo4j-to-backup-egress"
+    namespace = kubernetes_namespace.neo4j.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "neo4j"
+      }
+    }
+
+    # Allow egress to backup pods on port 6362
+    egress {
+      ports {
+        port     = "6362"
+        protocol = "TCP"
+      }
+      to {
+        pod_selector {
+          match_labels = {
+            "app.kubernetes.io/name" = var.backup_pod_label
+          }
+        }
+      }
+    }
+
+    policy_types = ["Egress"]
+  }
+}
+
 # Neo4j Helm release
 resource "helm_release" "neo4j" {
   name       = var.neo4j_instance_name
@@ -166,10 +270,22 @@ resource "helm_release" "neo4j" {
   # Use values file for base configuration
   values = [file("${path.module}/values/neo4j.yaml")]
 
-  # Override sensitive values
-  set_sensitive {
-    name  = "neo4j.password"
-    value = data.google_secret_manager_secret_version.neo4j_password.secret_data
+  # Override sensitive values - only when NOT using external K8s secret
+  dynamic "set_sensitive" {
+    for_each = var.neo4j_password_k8s_secret == null ? [1] : []
+    content {
+      name  = "neo4j.password"
+      value = data.google_secret_manager_secret_version.neo4j_password[0].secret_data
+    }
+  }
+
+  # Use existing K8s secret for password (avoids secret in Terraform state)
+  dynamic "set" {
+    for_each = var.neo4j_password_k8s_secret != null ? [1] : []
+    content {
+      name  = "neo4j.passwordFromSecret"
+      value = var.neo4j_password_k8s_secret
+    }
   }
 
   # Override instance name

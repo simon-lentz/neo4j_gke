@@ -70,3 +70,25 @@ variable "neo4j_helm_repository" {
   description = "Helm repository URL for Neo4j chart."
   default     = "https://helm.neo4j.com/neo4j"
 }
+
+variable "neo4j_password_k8s_secret" {
+  type        = string
+  description = <<-EOT
+    Name of an existing Kubernetes Secret containing the Neo4j password.
+    If set, the password will NOT be fetched from Secret Manager into Terraform state.
+
+    SECURITY: When null (default), the password is fetched from Secret Manager and
+    passed to Helm, which stores it in Terraform state (encrypted by CMEK, but still
+    present). For production, create the K8s secret externally (via CSI driver,
+    External Secrets Operator, or kubectl) and provide its name here.
+
+    The secret must have a key named 'NEO4J_AUTH' with value 'neo4j/<password>'.
+  EOT
+  default     = null
+}
+
+variable "backup_pod_label" {
+  type        = string
+  description = "Label value to identify backup pods for network policy. Pods with 'app.kubernetes.io/name' matching this value get backup network access."
+  default     = "neo4j-backup"
+}
