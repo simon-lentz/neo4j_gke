@@ -26,7 +26,7 @@ func TestBootstrapSmoke(t *testing.T) {
 	location := MustEnv(t, "NEO4J_GKE_STATE_BUCKET_LOCATION") // e.g., us-central1
 
 	// Work in a temp copy so state and .terraform are isolated per run.
-	tfDir := CopyModuleToTemp(t, "bootstrap")
+	tfDir := CopyEnvToTemp(t, "bootstrap")
 
 	unique := strings.ToLower(random.UniqueId())
 

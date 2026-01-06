@@ -19,7 +19,6 @@ This repository provisions a **single-instance Neo4j Enterprise** deployment on 
 .
 ├── infra/
 │   ├── envs/              # Platform layer (GCP resources)
-│   │   ├── bootstrap/     # One-time: creates GCS state bucket
 │   │   └── dev/           # Dev: VPC, GKE, IAM, secrets, buckets
 │   │
 │   ├── apps/              # Application layer (K8s deployments)
@@ -27,14 +26,14 @@ This repository provisions a **single-instance Neo4j Enterprise** deployment on 
 │   │       └── dev/
 │   │
 │   └── modules/           # Reusable OpenTofu modules
+│       ├── bootstrap/     # One-time: creates GCS state bucket + CMEK
 │       ├── vpc/
 │       ├── gke/
 │       ├── secrets/
 │       ├── backup_bucket/
 │       ├── audit_logging/
 │       ├── service_accounts/
-│       ├── wif/
-│       └── bootstrap/
+│       └── wif/
 │
 └── test/                  # Go integration tests (Terratest)
 ```
@@ -86,16 +85,38 @@ go test -v -timeout 30m ./...  # Integration tests (VPC, GKE, etc.)
 go test -tags=e2e -timeout 45m -v ./test/e2e/...
 ```
 
-### 1. Bootstrap (one-time)
+### 1. Bootstrap (one-time, two-step process)
 
-Bootstrap using the guide in the `bootstrap` module's [README](./infra/modules/bootstrap/README.md).
+The bootstrap creates a CMEK-encrypted GCS bucket for storing OpenTofu state. This is a two-step process because the bucket doesn't exist yet when we first apply.
+
+```bash
+cd infra/envs/bootstrap
+
+# Step 1: Create the state bucket (uses local state initially)
+tofu init
+tofu apply \
+  -var="project_id=YOUR_PROJECT" \
+  -var="bucket_location=us-central1"
+
+# Note the bucket name from the output (e.g., YOUR_PROJECT-state)
+
+# Step 2: Migrate local state to the newly created GCS bucket
+tofu init \
+  -backend-config="bucket=YOUR_STATE_BUCKET" \
+  -backend-config="prefix=bootstrap" \
+  -migrate-state -force-copy
+```
+
+See the bootstrap [README](./infra/envs/bootstrap/README.md) for additional options and configuration.
 
 ### 2. Deploy Platform
 
 ```bash
 cd infra/envs/dev
 tofu init -backend-config="bucket=YOUR_STATE_BUCKET"
-tofu apply -var="project_id=YOUR_PROJECT"
+tofu apply \
+  -var="project_id=YOUR_PROJECT" \
+  -var="state_bucket=YOUR_STATE_BUCKET"
 ```
 
 ### 3. Set Neo4j Password
@@ -133,6 +154,13 @@ open http://localhost:7474/browser
 
 ## Documentation
 
+### Environment Documentation
+
+| Environment | Description |
+| ----------- | ----------- |
+| [bootstrap](infra/envs/bootstrap/README.md) | State bucket + CMEK (one-time setup) |
+| [dev](infra/envs/dev/README.md) | Dev platform infrastructure |
+
 ### Module Documentation
 
 | Module | Description |
@@ -144,7 +172,6 @@ open http://localhost:7474/browser
 | [audit_logging](infra/modules/audit_logging/README.md) | KMS/GCS audit logging |
 | [service_accounts](infra/modules/service_accounts/README.md) | GCP service accounts |
 | [wif](infra/modules/wif/README.md) | Workload Identity Federation |
-| [bootstrap](infra/modules/bootstrap/README.md) | State bucket bootstrap |
 
 ### Application Documentation
 

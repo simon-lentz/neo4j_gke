@@ -165,6 +165,18 @@ func CopyModuleToTemp(t *testing.T, moduleRelativePath string) string {
 	)
 }
 
+// CopyEnvToTemp copies an environment configuration to a temp directory for testing.
+// The envPath should be relative to infra/envs/ (e.g., "bootstrap", "dev").
+func CopyEnvToTemp(t *testing.T, envPath string) string {
+	t.Helper()
+
+	return testStructure.CopyTerraformFolderToTemp(
+		t,
+		RepoRoot(t),
+		filepath.Join("infra", "envs", envPath),
+	)
+}
+
 // CopyAppModuleToTemp copies an app layer module to a temp directory for testing.
 // The appPath should be relative to infra/apps/ (e.g., "neo4j/test").
 func CopyAppModuleToTemp(t *testing.T, appPath string) string {

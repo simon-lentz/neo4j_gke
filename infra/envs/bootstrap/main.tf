@@ -6,6 +6,7 @@
 resource "google_kms_key_ring" "state_ring" {
   name       = local.computed_ring
   location   = local.ring_location
+  project    = var.project_id
   depends_on = [google_project_service.enabled]
 }
 
@@ -27,6 +28,7 @@ resource "google_kms_crypto_key" "state_key" {
 }
 
 data "google_storage_project_service_account" "gcs_sa" {
+  project    = var.project_id
   depends_on = [google_project_service.enabled]
 }
 
@@ -41,6 +43,7 @@ resource "google_kms_crypto_key_iam_member" "allow_gcs_key" {
 resource "google_storage_bucket" "state_bucket" {
   name                        = local.bucket_name
   location                    = var.bucket_location
+  project                     = var.project_id
   storage_class               = var.storage_class
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
